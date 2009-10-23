@@ -74,7 +74,7 @@ class WikiPoll
             $lines = array_values($lines);    // strip first line
         }
 
-        if ($authorized && $wgUser->mPassword == "")
+        if ($authorized && !$wgUser->mPassword)
             return wfMsg('wikipoll-must-login');
 
         // alternative selection is equivalent to vote with 1 point
@@ -221,6 +221,7 @@ class WikiPoll
                     </li>
 EOT;
                 }
+                $str .= "<ul>$block</ul>";
             }
             else
             {
@@ -242,7 +243,6 @@ EOT;
 </form>
 EOT;
             }
-            $str .= "<ul>$block</ul>";
         }
 
         $str = preg_replace('/[\n\r]\s+/','',trim($str));
