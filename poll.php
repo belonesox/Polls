@@ -206,6 +206,9 @@ class WikiPoll
             {
                 $votes_rest = $poll_points-$user_votes_count;
                 $str .= wfMsgExt('wikipoll-remaining', 'parseinline', $votes_rest);
+            }
+            if ($poll_points > 0)
+            {
                 $block = ''; $i = 0;
                 foreach($labels as $label)
                 {
