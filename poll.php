@@ -1,5 +1,4 @@
 <?php
-
 /*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -10,6 +9,12 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU General Public License 2.0 or later
  */
 $wgExtensionFunctions[] = "wfPoll";
+
+/*
+ * Messages.
+ */
+$dir = dirname(__FILE__) . '/';
+$wgExtensionMessagesFiles['WikiPoll'] = $dir . 'poll.i18n.php';
 
 class WikiPoll
 {
@@ -40,22 +45,24 @@ class WikiPoll
         return $user_votes_count;
     }
 
-    function renderPoll($input)
+    function renderPoll($input, $attr, $parser)
     {
-        global $wgParser,$wgUser,$wgTitle,$wgOut;
+        global $wgUser, $wgTitle, $wgOut;
+
+        wfLoadExtensionMessages('WikiPoll');
 
         $IP = wfGetIP();                    // IP-address or poll reader or voter.
         $ID = strtoupper(md5($input));      // MD5-hash or poll text
         $timestamp = date("Y-m-d H:i:s");   // current date
 
         if ($wgUser->mName == "")
-                $user = $IP;
+            $user = $IP;
         else
-                $user = $wgUser->mName;
+            $user = $wgUser->mName;
 
-        $wgParser->disableCache();
+        $parser->disableCache();
 
-        $lines = split("\n",$input);
+        $lines = split("\n", $input);
         $labels = array();
         $values = array();
 
@@ -67,16 +74,10 @@ class WikiPoll
             $lines = array_values($lines);    // strip first line
         }
 
-        // TODO: I18n
-        if ($authorized && ($wgUser->mPassword == ""))
-        {
-            return <<<EOT
-            <p><b><small>Sorry, you must be logged to view this poll.</small></b>
-            <p><b><small>Извините, вы должны войти в систему, чтобы участвовать в этом голосовании или видеть его результаты.</small></b>
-EOT;
-        }
+        if ($authorized && $wgUser->mPassword == "")
+            return wfMsg('wikipoll-must-login');
 
-        // alternative selection is equiivalent to vote with 1 point
+        // alternative selection is equivalent to vote with 1 point
         if (trim($lines[1]) == "ALTERNATIVE")
             $lines[1] = "POINTS 1";
 
@@ -93,7 +94,7 @@ EOT;
             $lines = array_values($lines);
         }
 
-        // We must have at least two lines : question and at least one variant of the answer.
+        // We must have at least two lines: question and at least one variant of the answer.
         if (sizeof($lines) < 2)
             return '';
 
@@ -117,6 +118,7 @@ EOT;
 
         // Select count of used votes
         $user_votes_count = $this->get_user_votes_count($ID, $user);
+
         // *******************************************************************************************
         // action treatment
         // *******************************************************************************************
@@ -148,16 +150,16 @@ EOT;
         $user_votes_count = $this->get_user_votes_count($ID, $user);
         // If no more points to vote -> show results
         if (($user_votes_count >= $poll_points && $poll_points > 0) ||
-                ($user_votes_count > 0 && $poll_points <= 0))
+            ($user_votes_count > 0 && $poll_points <= 0))
         {
             // Show results.
             // Get votes distribution
             $sql =
-" SELECT  poll_answer, count(1) as votes
-        FROM `wikipolls`.`poll_vote`
-     WHERE  poll_id = '{$ID}'
-GROUP BY  1
-ORDER BY  1";
+                " SELECT  poll_answer, count(1) as votes
+                    FROM `wikipolls`.`poll_vote`
+                   WHERE  poll_id = '{$ID}'
+                GROUP BY  1
+                ORDER BY  1";
             $res = $this->dbw->query($sql, __METHOD__);
             while ($row = $this->dbw->fetchObject($res))
                 $values[$row->poll_answer-1] += $row->votes;
@@ -190,7 +192,7 @@ ORDER BY  1";
             $str = str_replace("<tr","\n<tr",$str);
             $result = "<a name='poll-$ID'><p><b>$question</b></p></a>$str";
 
-            $wgParser->disableCache();
+            $parser->disableCache();
             return $result;
         }
 
@@ -203,11 +205,8 @@ ORDER BY  1";
             if ($poll_points > 1)
             {
                 $votes_rest = $poll_points-$user_votes_count;
-                $str .= <<<EOT
-<p><small>You have {$votes_rest} points to vote</small>/
-     <small>Вы можете использовать {$votes_rest} голоса.</small></p>
-EOT;
-                $block=''; $i=0;
+                $str .= wfMsgExt('wikipoll-remaining', 'parseinline', $votes_rest);
+                $block = ''; $i = 0;
                 foreach($labels as $label)
                 {
                     $i++;
@@ -251,18 +250,11 @@ EOT;
     }
 }
 
-function wf_render_poll($str)
-{
-    global $WikiPoll;
-    return $WikiPoll->renderPoll($str);
-}
-
 function wfPoll()
 {
     global $wgParser;
-    global $WikiPoll;
     $WikiPoll = new WikiPoll();
-    $wgParser->setHook("poll", "wf_render_poll");
+    $wgParser->setHook("poll", array($WikiPoll, "renderPoll"));
 }
 
 ?>
