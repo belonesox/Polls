@@ -40,10 +40,14 @@ class WikiPoll
         return $label;
     }
 
-    function get_user_votes_count($ID, $user)
+    function get_user_votes_count($ID, $user, $IP = false)
     {
         // Select count of used votes
-        $user_votes_count = $this->dbw->selectField('`wikipolls`.`poll_vote`', 'count(1)', array('poll_id' => $ID, 'poll_user' => $user));
+        $where = 'poll_id='.$this->dbw->addQuotes($ID) . ' AND (poll_user='.$this->dbw->addQuotes($user);
+        if ($IP)
+            $where .= ' OR poll_ip='.$this->dbw->addQuotes($IP);
+        $where .= ')';
+        $user_votes_count = $this->dbw->selectField('`wikipolls`.`poll_vote`', 'count(1)', $where, __METHOD__);
         return $user_votes_count;
     }
 
@@ -64,47 +68,61 @@ class WikiPoll
 
         $parser->disableCache();
 
-        $lines = split("\n", $input);
+        $lines = split("\n", trim($input));
         $labels = array();
         $values = array();
 
-        $authorized = 0;
-        if (strpos($lines[1], "AUTHORIZED") !== false)      // Important: !==
+        $authorized   = 0;
+        $poll_points  = 0;
+        $poll_end     = false;
+        $hide_results = false;
+        $restrict_ip  = false;
+        while (true)
         {
-            $authorized = 1;
-            unset($lines[1]);
-            $lines = array_values($lines);    // strip first line
+            $line = trim(array_shift($lines));
+            if ($line == 'AUTHORIZED')
+            {
+                $authorized = 1;
+                continue;
+            }
+            elseif ($line == 'ALTERNATIVE')
+            {
+                $poll_points = 1;
+                continue;
+            }
+            elseif (preg_match('/^POINTS\s*(\d+)$/s', $line, $m))
+            {
+                $poll_points = $m[1];
+                continue;
+            }
+            elseif (preg_match('/^(END[-_]?POLL|POLL[-_]?END)\s*(\d{4}-\d{2}-\d{2})$/s', $line, $m))
+            {
+                $poll_end = $m[2];
+                continue;
+            }
+            elseif ($line == 'HIDE_RESULTS')
+            {
+                $hide_results = true;
+                continue;
+            }
+            elseif ($line == 'RESTRICT_IP')
+            {
+                $restrict_ip = true;
+                continue;
+            }
+            array_unshift($lines, $line);
+            break;
         }
 
+        /* Restrict poll display and/or voting to authorized users */
         if ($authorized && !$wgUser->mPassword)
             return wfMsg('wikipoll-must-login');
 
-        // alternative selection is equivalent to vote with 1 point
-        if (trim($lines[1]) == "ALTERNATIVE")
-            $lines[1] = "POINTS 1";
-
-        $poll_points = 0;
-        // If line like POINTS
-        if (strpos($lines[1],"POINTS") !== false)
-        {
-            $terms = explode(' ',trim($lines[1]));
-            // Getting the number of points
-            if (sizeof($terms) > 1 && is_numeric($terms[sizeof($terms)-1]))
-                $poll_points = $terms[sizeof($terms)-1];
-            // strip first line
-            unset($lines[1]);
-            $lines = array_values($lines);
-        }
-
-        // We must have at least two lines: question and at least one variant of the answer.
+        /* We must have at least two lines: question and at least one variant of the answer */
         if (sizeof($lines) < 2)
             return '';
 
-        $question = $this->parseLine($lines[1]);
-
-        // strip first line
-        unset($lines[1]);
-        $lines = array_values($lines);
+        $question = $this->parseLine(array_shift($lines));
 
         $labels = array();
         $values = array();
@@ -119,16 +137,16 @@ class WikiPoll
         }
 
         // Select count of used votes
-        $user_votes_count = $this->get_user_votes_count($ID, $user);
+        $user_votes_count = $this->get_user_votes_count($ID, $user, $restrict_ip ? $IP : false);
 
         // *******************************************************************************************
         // action treatment
         // *******************************************************************************************
-        if (!empty($_POST['poll-ID']) &&
-            $_POST['poll-ID'] == $ID &&
+        if (!empty($_POST['poll-ID']) && $_POST['poll-ID'] == $ID &&
             (($user_votes_count < $poll_points && $poll_points > 0) ||
              ($user_votes_count == 0 && $poll_points <= 0)) &&
-            !empty($_POST['answers']))
+            !empty($_POST['answers']) &&
+            (!$poll_end || $poll_end > date('Y-m-d')))
         {
             $user_answers = $_POST['answers'];
             // Just one answer
@@ -149,50 +167,62 @@ class WikiPoll
         }
 
         // Select count of used votes
-        $user_votes_count = $this->get_user_votes_count($ID, $user);
+        $user_votes_count = $this->get_user_votes_count($ID, $user, $restrict_ip ? $IP : false);
         // If no more points to vote -> show results
         if (($user_votes_count >= $poll_points && $poll_points > 0) ||
-            ($user_votes_count > 0 && $poll_points <= 0))
+            ($user_votes_count > 0 && $poll_points <= 0) ||
+            $poll_end && $poll_end <= date('Y-m-d'))
         {
-            // Show results.
-            // Get votes distribution
-            $sql =
-                " SELECT  poll_answer, count(1) as votes
-                    FROM `wikipolls`.`poll_vote`
-                   WHERE  poll_id = '{$ID}'
-                GROUP BY  1
-                ORDER BY  1";
-            $res = $this->dbw->query($sql, __METHOD__);
-            while ($row = $this->dbw->fetchObject($res))
-                $values[$row->poll_answer-1] += $row->votes;
-            $this->dbw->freeResult($res);
+            if (!$hide_results || $poll_end && $poll_end <= date('Y-m-d'))
+            {
+                // Show results.
+                // Get votes distribution
+                $sql =
+                    " SELECT  poll_answer, count(1) as votes
+                        FROM `wikipolls`.`poll_vote`
+                       WHERE  poll_id = '{$ID}'
+                    GROUP BY  1
+                    ORDER BY  1";
+                $res = $this->dbw->query($sql, __METHOD__);
+                while ($row = $this->dbw->fetchObject($res))
+                    $values[$row->poll_answer-1] += $row->votes;
+                $this->dbw->freeResult($res);
 
-            $str = "<a name='poll-$ID'><p><b>$question</b></p></a>";
+                require_once("graphs.inc.php");
+                $graph = new BAR_GRAPH('hBar');
+                $graph->showValues = 1;
+                $graph->barWidth = 20;
+                $graph->labelSize = 12;
+                $graph->absValuesSize = 12;
+                $graph->percValuesSize = 12;
+                $graph->graphBGColor = 'Aquamarine';
+                $graph->barColors = 'Gold';
+                $graph->barBGColor = 'Azure';
+                $graph->labelColor = 'black';
+                $graph->labelBGColor = 'LemonChiffon';
+                $graph->absValuesColor = '#000000';
+                $graph->absValuesBGColor = 'Cornsilk';
+                $graph->graphPadding = 15;
+                $graph->graphBorder = '1px solid blue';
 
-            require_once("graphs.inc.php");
-            $graph = new BAR_GRAPH('hBar');
-            $graph->showValues = 1;
-            $graph->barWidth = 20;
-            $graph->labelSize = 12;
-            $graph->absValuesSize = 12;
-            $graph->percValuesSize = 12;
-            $graph->graphBGColor = 'Aquamarine';
-            $graph->barColors = 'Gold';
-            $graph->barBGColor = 'Azure';
-            $graph->labelColor = 'black';
-            $graph->labelBGColor = 'LemonChiffon';
-            $graph->absValuesColor = '#000000';
-            $graph->absValuesBGColor = 'Cornsilk';
-            $graph->graphPadding = 15;
-            $graph->graphBorder = '1px solid blue';
+                $graph->values = $values;
+                $graph->labels = $labels;
+                $str = $graph->create();
+                $str = str_replace("<table","\n<table",$str);
+                $str = str_replace("<td","\n<td",$str);
+                $str = str_replace("<tr","\n<tr",$str);
+            }
+            else
+            {
+                $n = $this->dbw->selectField(
+                    '`wikipolls`.`poll_vote`',
+                    'COUNT(DISTINCT poll_user)',
+                    array('poll_id' => $ID),
+                    __METHOD__);
+                $str = wfMsgExt('wikipoll-voted-count', 'parseinline', $n, $poll_end);
+            }
 
-            $graph->values = $values;
-            $graph->labels = $labels;
-            $str = $graph->create();
-            $str = str_replace("<table","\n<table",$str);
-            $str = str_replace("<td","\n<td",$str);
-            $str = str_replace("<tr","\n<tr",$str);
-            $result = "<a name='poll-$ID'><p><b>$question</b></p></a>$str";
+            $result = "<a name='poll-$ID'></a><p><b>$question</b></p>$str";
 
             $parser->disableCache();
             return $result;
