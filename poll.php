@@ -142,7 +142,7 @@ class WikiPoll
         // *******************************************************************************************
         // action treatment
         // *******************************************************************************************
-        if (!empty($_POST['poll-ID']) && $_POST['poll-ID'] == $ID &&
+        if (!empty($_POST['poll-ID']) && $_POST['poll-ID'] == $ID && $_POST['vote'] &&
             (($user_votes_count < $poll_points && $poll_points > 0) ||
              ($user_votes_count == 0 && $poll_points <= 0)) &&
             !empty($_POST['answers']) &&
@@ -250,8 +250,8 @@ class WikiPoll
                         <form action="#poll-{$ID}" method="POST">
                             <input type="hidden" name="poll-ID" value="{$ID}">
                             <input type="hidden" name="answers" value="{$i}">
-                            <input style="color:blue;background-color:yellow" value='+' name="Ok-{$ID}-{$i}" type='submit'>&nbsp;
-                            <label for="Ok-{$ID}-{$i}">{$label}</label>
+                            <input style="color:blue;background-color:yellow" value='+' name="vote" type='submit'>&nbsp;
+                            <label for="vote">{$label}</label>
                         </form>
                     </li>
 EOT;
