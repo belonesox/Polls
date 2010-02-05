@@ -27,7 +27,7 @@ class WikiPoll
     }
 
     // Local parsing and HTML rendering for individual lines of wiki markup
-    function parseLine($line)
+    function parse($line)
     {
         global $wgTitle, $wgParser;
         /* Если использовать для разбора каких-либо кусков текста глобальный парсер
@@ -36,8 +36,7 @@ class WikiPoll
            UNIQ35b039f153ed3bf9-h-1--QINU забываются в тексте статьи.
            Этого, между прочим, не делает даже OutputPage::parse() - а должна бы :-( */
         $parserOutput = $wgParser->parse(trim($line), $wgTitle, $this->parserOptions, false, false);
-        $label = str_replace(array("<p>","</p>","\r","\n"), "", $parserOutput->mText);
-        return $label;
+        return str_replace(array("<p>","</p>","\r","\n"), "", $parserOutput->mText);
     }
 
     function get_user_votes_count($ID, $user, $IP = false)
@@ -122,7 +121,7 @@ class WikiPoll
         if (sizeof($lines) < 2)
             return '';
 
-        $question = $this->parseLine(array_shift($lines));
+        $question = $this->parse(array_shift($lines));
 
         $labels = array();
         $values = array();
@@ -130,7 +129,7 @@ class WikiPoll
         {
             if (trim($line) != "")
             {
-                $label = $this->parseLine($line);
+                $label = $this->parse($line);
                 array_push($labels, $label);
                 array_push($values, 0);
             }
@@ -219,12 +218,11 @@ class WikiPoll
                     'COUNT(DISTINCT poll_user)',
                     array('poll_id' => $ID),
                     __METHOD__);
-                $str = wfMsgExt('wikipoll-voted-count', 'parseinline', $n, $poll_end);
+                $str = $this->parse(wfMsg('wikipoll-voted-count', $n, $poll_end));
             }
 
             $result = "<a name='poll-$ID'></a><p><b>$question</b></p>$str";
 
-            $parser->disableCache();
             return $result;
         }
 
@@ -237,7 +235,7 @@ class WikiPoll
             if ($poll_points > 1)
             {
                 $votes_rest = $poll_points-$user_votes_count;
-                $str .= wfMsgExt('wikipoll-remaining', 'parseinline', $votes_rest);
+                $str .= $this->parse(wfMsg('wikipoll-remaining', $votes_rest));
             }
             if ($poll_points > 0)
             {
@@ -246,14 +244,14 @@ class WikiPoll
                 {
                     $i++;
                     $block .= <<<EOT
-                    <li>
-                        <form action="#poll-{$ID}" method="POST">
-                            <input type="hidden" name="poll-ID" value="{$ID}">
-                            <input type="hidden" name="answers" value="{$i}">
-                            <input style="color:blue;background-color:yellow" value='+' name="vote" type='submit'>&nbsp;
-                            <label for="vote">{$label}</label>
-                        </form>
-                    </li>
+<li>
+    <form action="#poll-{$ID}" method="POST">
+        <input type="hidden" name="poll-ID" value="{$ID}">
+        <input type="hidden" name="answers" value="{$i}">
+        <input style="color:blue;background-color:yellow" value='+' name="vote" type='submit'>&nbsp;
+        <label for="vote">{$label}</label>
+    </form>
+</li>
 EOT;
                 }
                 $str .= "<ul>$block</ul>";
@@ -280,7 +278,7 @@ EOT;
             }
         }
 
-        $str = preg_replace('/[\n\r]\s+/','',trim($str));
+        $str = preg_replace('/[\n\r]+\s+/','',trim($str));
         return $str;
     }
 }
