@@ -119,7 +119,11 @@ class WikiPoll
 
         /* We must have at least two lines: question and at least one variant of the answer */
         if (sizeof($lines) < 2)
-            return '';
+            return wfMsg('wikipoll-empty');
+
+        /* HIDE_RESULTS requires END_POLL */
+        if ($hide_results && !$poll_end)
+            return wfMsg('wikipoll-results-hidden-but-no-end');
 
         $question = $this->parse(array_shift($lines));
 
