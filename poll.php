@@ -18,6 +18,8 @@ $wgExtensionMessagesFiles['WikiPoll'] = $dir . 'poll.i18n.php';
 
 class WikiPoll
 {
+    var $parser;
+
     function WikiPoll()
     {
         $this->parserOptions = new ParserOptions();
@@ -29,13 +31,13 @@ class WikiPoll
     // Local parsing and HTML rendering for individual lines of wiki markup
     function parse($line)
     {
-        global $wgTitle, $wgParser;
-        /* Если использовать для разбора каких-либо кусков текста глобальный парсер
-           $wgParser, нужно передавать $clearState = false! Иначе функция parse дёргает
-           $wgParser->clearState() и все сохранённые подстановки типа
+        global $wgTitle;
+        /* Если использовать для разбора каких-либо кусков текста глобальный парсер,
+           нужно передавать $clearState = false! Иначе функция parse дёргает
+           Parser::clearState() и все сохранённые подстановки типа
            UNIQ35b039f153ed3bf9-h-1--QINU забываются в тексте статьи.
            Этого, между прочим, не делает даже OutputPage::parse() - а должна бы :-( */
-        $parserOutput = $wgParser->parse(trim($line), $wgTitle, $this->parserOptions, false, false);
+        $parserOutput = $this->parser->parse(trim($line), $wgTitle, $this->parserOptions, false, false);
         return str_replace(array("<p>","</p>","\r","\n"), "", $parserOutput->mText);
     }
 
@@ -65,6 +67,7 @@ class WikiPoll
         else
             $user = $wgUser->mName;
 
+        $this->parser = $parser;
         $parser->disableCache();
 
         $lines = split("\n", trim($input));
