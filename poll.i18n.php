@@ -3,6 +3,7 @@
 $messages = array();
 
 $messages['en'] = array(
+    'wikipoll-desc'        => 'A simple extension for inserting polls into articles.',
     'wikipoll-must-login'  => '<b><font color="red">Sorry, you must be logged to view this poll.</font></b>',
     'wikipoll-empty'       => '<b><font color="red">Error: poll is empty.</font></b>',
     'wikipoll-results-hidden-but-no-end' => '<b><font color="red">Error: poll results would be hidden forever, since HIDE_RESULTS were specified without poll end marker END_POLL YYYY-MM-DD.</font></b>',
@@ -16,6 +17,7 @@ $messages['en'] = array(
 );
 
 $messages['ru'] = array(
+    'wikipoll-desc'        => 'Простое расширение для организации опросов/голосований на основе MediaWiki.',
     'wikipoll-must-login'  => '<b><font color="red">Извините, вы должны войти в систему, чтобы участвовать в этом голосовании или видеть его результаты.</font></b>',
     'wikipoll-empty'       => '<b><font color="red">Ошибка: пустой опрос.</font></b>',
     'wikipoll-results-hidden-but-no-end' => '<b><font color="red">Ошибка: результаты будут скрыты навеки, ибо указано HIDE_RESULTS без маркера конца голосования END_POLL YYYY-MM-DD.</font></b>',
