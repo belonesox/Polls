@@ -7,6 +7,7 @@
  * (at your option) any later version.
  *
  * @author Stas Fomin <stas-fomin@yandex.ru>
+ * @author Vitaliy Filippov <vitalif@mail.ru>
  * @license http://www.gnu.org/copyleft/gpl.html GNU General Public License 2.0 or later
  */
 
@@ -85,31 +86,43 @@ class WikiPoll
             $line = trim(array_shift($lines));
             if ($line == 'AUTHORIZED')
             {
+                /* Display results and allow voting only for authorized users */
                 $authorized = 1;
+                continue;
+            }
+            elseif ($line == 'AUTHORIZED_DISPLAY')
+            {
+                /* Display poll options, results, and allow voting only for authorized users */
+                $authorized = 2;
                 continue;
             }
             elseif ($line == 'ALTERNATIVE')
             {
+                /* Alternative selection (default) */
                 $poll_points = 1;
                 continue;
             }
             elseif (preg_match('/^POINTS\s*(\d+)$/s', $line, $m))
             {
-                $poll_points = $m[1];
+                /* Selection of N=$m[1] options */
+                $poll_points = intval($m[1]);
                 continue;
             }
             elseif (preg_match('/^(END[-_]?POLL|POLL[-_]?END)\s*(\d{4}-\d{2}-\d{2})$/s', $line, $m))
             {
+                /* Disable voting after $m[2] */
                 $poll_end = $m[2];
                 continue;
             }
             elseif ($line == 'HIDE_RESULTS')
             {
+                /* Hide poll results until POLL_END */
                 $hide_results = true;
                 continue;
             }
             elseif ($line == 'RESTRICT_IP')
             {
+                /* Restrict voting by IP, not only by username */
                 $restrict_ip = true;
                 continue;
             }
@@ -117,8 +130,12 @@ class WikiPoll
             break;
         }
 
-        /* Restrict poll display and/or voting to authorized users */
-        if ($authorized && !$wgUser->mPassword)
+        /* Default is alternative selection */
+        if ($poll_points < 1)
+            $poll_points = 1;
+
+        /* Restrict poll display to authorized users when AUTHORIZED_DISPLAY is specified */
+        if ($authorized > 1 && !$wgUser->getID())
             return wfMsg('wikipoll-must-login');
 
         /* We must have at least two lines: question and at least one variant of the answer */
@@ -133,13 +150,13 @@ class WikiPoll
 
         $labels = array();
         $values = array();
-        foreach($lines as $line)
+        foreach ($lines as $line)
         {
             if (trim($line) != "")
             {
                 $label = self::parse($parser, $line);
-                array_push($labels, $label);
-                array_push($values, 0);
+                $labels[] = $label;
+                $values[] = 0;
             }
         }
 
@@ -148,14 +165,11 @@ class WikiPoll
 
         $dbw =& wfGetDB(DB_MASTER);
 
-        // *******************************************************************************************
-        // action treatment
-        // *******************************************************************************************
-        if (!empty($_POST['poll-ID']) && $_POST['poll-ID'] == $ID && $_POST['vote'] &&
-            (($user_votes_count < $poll_points && $poll_points > 0) ||
-             ($user_votes_count == 0 && $poll_points <= 0)) &&
-            !empty($_POST['answers']) &&
-            (!$poll_end || $poll_end > date('Y-m-d')))
+        // Action treatment
+        if ($_POST['poll-ID'] == $ID && $_POST['vote'] && $_POST['answers'] &&
+            !($user_votes_count >= $poll_points ||
+              $poll_end && $poll_end <= date('Y-m-d') ||
+              $authorized > 0 && !$wgUser->getID()))
         {
             $user_answers = $_POST['answers'];
             // Just one answer
@@ -163,7 +177,7 @@ class WikiPoll
                 $user_answers = array($user_answers => 1);
             // Register all user votes
             $votes = array_keys($user_answers);
-            foreach($votes as $vote)
+            foreach ($votes as $vote)
             {
                 $dbw->insert('poll_vote', array(
                     'poll_id'     => $ID,
@@ -173,82 +187,23 @@ class WikiPoll
                     'poll_date'   => $timestamp,
                 ), __METHOD__);
             }
+            // Update count of used votes
+            $user_votes_count = self::get_user_votes_count($ID, $user, $restrict_ip ? $IP : false);
         }
 
-        // Select count of used votes
-        $user_votes_count = self::get_user_votes_count($ID, $user, $restrict_ip ? $IP : false);
-        // If no more points to vote -> show results
-        if (($user_votes_count >= $poll_points && $poll_points > 0) ||
-            ($user_votes_count > 0 && $poll_points <= 0) ||
-            $poll_end && $poll_end <= date('Y-m-d'))
+        $str = "<a name='poll-$ID'><p><b>$question</b></p></a>";
+
+        // User passed authorization && Poll did not end && Votes available
+        if ($user_votes_count < $poll_points &&
+            (!$poll_end || $poll_end > date('Y-m-d')) &&
+            (!$authorized || $wgUser->getID()))
         {
-            if (!$hide_results || $poll_end && $poll_end <= date('Y-m-d'))
-            {
-                // Show results.
-                // Get votes distribution
-                $res = $dbw->select('poll_vote',
-                    'poll_answer, count(1) votes',
-                    array('poll_id' => $ID),
-                    __METHOD__,
-                    array('GROUP BY' => '1')
-                );
-                while ($row = $dbw->fetchObject($res))
-                    $values[$row->poll_answer-1] += $row->votes;
-                $dbw->freeResult($res);
-
-                require_once("graphs.inc.php");
-                $graph = new BAR_GRAPH('hBar');
-                $graph->showValues = 1;
-                $graph->barWidth = 20;
-                $graph->labelSize = 12;
-                $graph->absValuesSize = 12;
-                $graph->percValuesSize = 12;
-                $graph->graphBGColor = 'Aquamarine';
-                $graph->barColors = 'Gold';
-                $graph->barBGColor = 'Azure';
-                $graph->labelColor = 'black';
-                $graph->labelBGColor = 'LemonChiffon';
-                $graph->absValuesColor = '#000000';
-                $graph->absValuesBGColor = 'Cornsilk';
-                $graph->graphPadding = 15;
-                $graph->graphBorder = '1px solid blue';
-
-                $graph->values = $values;
-                $graph->labels = $labels;
-                $str = $graph->create();
-                $str = str_replace("<table","\n<table",$str);
-                $str = str_replace("<td","\n<td",$str);
-                $str = str_replace("<tr","\n<tr",$str);
-            }
-            else
-            {
-                $n = $dbw->selectField('poll_vote',
-                    'COUNT(DISTINCT poll_user)',
-                    array('poll_id' => $ID),
-                    __METHOD__);
-                $str = self::parse($parser, wfMsg('wikipoll-voted-count', $n, $poll_end));
-            }
-
-            $result = "<a name='poll-$ID'></a><p><b>$question</b></p>$str";
-
-            return $result;
-        }
-
-        // *******************************************************************************************
-        // show form
-        // *******************************************************************************************
-        {
+            // Show form
             $action = $wgTitle->escapeLocalUrl("action=purge");
-            $str = "<a name='poll-$ID'><p><b>$question</b></p></a>";
-            if ($poll_points > 1)
-            {
-                $votes_rest = $poll_points-$user_votes_count;
-                $str .= self::parse($parser, wfMsg('wikipoll-remaining', $votes_rest));
-            }
-            if ($poll_points > 0)
+            if ($poll_points == 1)
             {
                 $block = ''; $i = 0;
-                foreach($labels as $label)
+                foreach ($labels as $label)
                 {
                     $i++;
                     $block .= <<<EOT
@@ -266,8 +221,10 @@ EOT;
             }
             else
             {
+                $votes_rest = $poll_points-$user_votes_count;
+                $str .= self::parse($parser, wfMsg('wikipoll-remaining', $votes_rest));
                 $block = ''; $i = 0;
-                foreach($labels as $label)
+                foreach ($labels as $label)
                 {
                     $i++;
                     $block .= <<<EOT
@@ -284,9 +241,74 @@ EOT;
 </form>
 EOT;
             }
+            $str = preg_replace('/[\n\r]+\s+/', '', trim($str));
+            return $str;
+        }
+        // User passed authorization && Votes unavailable && Results not hidden, or poll ended
+        elseif (($user_votes_count >= $poll_points && !$hide_results || $poll_end <= date('Y-m-d')) &&
+            (!$authorized || $wgUser->getID()))
+        {
+            // Show results.
+            // Get votes distribution
+            $res = $dbw->select('poll_vote',
+                'poll_answer, count(1) votes',
+                array('poll_id' => $ID),
+                __METHOD__,
+                array('GROUP BY' => '1')
+            );
+            while ($row = $dbw->fetchObject($res))
+                $values[$row->poll_answer-1] += $row->votes;
+            $dbw->freeResult($res);
+
+            require_once("graphs.inc.php");
+            $graph = new BAR_GRAPH('hBar');
+            $graph->showValues = 1;
+            $graph->barWidth = 20;
+            $graph->labelSize = 12;
+            $graph->absValuesSize = 12;
+            $graph->percValuesSize = 12;
+            $graph->graphBGColor = 'Aquamarine';
+            $graph->barColors = 'Gold';
+            $graph->barBGColor = 'Azure';
+            $graph->labelColor = 'black';
+            $graph->labelBGColor = 'LemonChiffon';
+            $graph->absValuesColor = '#000000';
+            $graph->absValuesBGColor = 'Cornsilk';
+            $graph->graphPadding = 15;
+            $graph->graphBorder = '1px solid blue';
+
+            $graph->values = $values;
+            $graph->labels = $labels;
+            $s = $graph->create();
+            $s = str_replace("<table","\n<table",$s);
+            $s = str_replace("<td","\n<td",$s);
+            $s = str_replace("<tr","\n<tr",$s);
+            $str .= $s;
+        }
+        // All other cases
+        else
+        {
+            // Show poll options
+            $str .= "<ul>";
+            foreach ($labels as $label)
+                $str .= "<li>$label</li>";
+            $str .= "</ul>";
+            if (!$authorized || $wgUser->getID())
+            {
+                // "Total users voted" for authorized users
+                $n = $dbw->selectField('poll_vote',
+                    'COUNT(DISTINCT poll_user)',
+                    array('poll_id' => $ID),
+                    __METHOD__);
+                $str .= self::parse($parser, wfMsg('wikipoll-voted-count', $n, $poll_end));
+            }
+            else
+            {
+                // "You must login to vote" for unathorized users
+                $str .= wfMsg('wikipoll-must-login-to-vote');
+            }
         }
 
-        $str = preg_replace('/[\n\r]+\s+/','',trim($str));
         return $str;
     }
 }
