@@ -38,7 +38,9 @@ class WikiPoll
             self::$parserOptions->setEditSection(false);
             self::$parserOptions->setTidy(false);
         }
+        $old = $parser->mOptions;
         $parserOutput = $parser->parse(trim($line), $parser->mTitle ? $parser->mTitle : $wgTitle, self::$parserOptions, false, false);
+        $parser->mOptions = $old;
         return str_replace(array("<p>","</p>","\r","\n"), "", $parserOutput->mText);
     }
 
