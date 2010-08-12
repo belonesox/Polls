@@ -167,33 +167,38 @@ class WikiPoll
 
         $dbw =& wfGetDB(DB_MASTER);
 
+        $str = "<a name='poll-$ID'><p><b>$question</b></p></a>";
+
         // Action treatment
-        if ($_POST['poll-ID'] == $ID && $_POST['vote'] && $_POST['answers'] &&
+        if ($_POST['poll-ID'] == $ID && $_POST['vote'] &&
             !($user_votes_count >= $poll_points ||
               $poll_end && $poll_end <= date('Y-m-d') ||
               $authorized > 0 && !$wgUser->getID()))
         {
             $user_answers = $_POST['answers'];
             // Just one answer
-            if (!is_array($user_answers))
+            if ($user_answers && !is_array($user_answers))
                 $user_answers = array($user_answers => 1);
-            // Register all user votes
-            $votes = array_keys($user_answers);
-            foreach ($votes as $vote)
+            if ($user_answers && count($user_answers)+$user_votes_count <= $poll_points)
             {
-                $dbw->insert('poll_vote', array(
-                    'poll_id'     => $ID,
-                    'poll_user'   => $user,
-                    'poll_ip'     => $IP,
-                    'poll_answer' => $vote,
-                    'poll_date'   => $timestamp,
-                ), __METHOD__);
+                // Register all user votes
+                $votes = array_keys($user_answers);
+                foreach ($votes as $vote)
+                {
+                    $dbw->insert('poll_vote', array(
+                        'poll_id'     => $ID,
+                        'poll_user'   => $user,
+                        'poll_ip'     => $IP,
+                        'poll_answer' => $vote,
+                        'poll_date'   => $timestamp,
+                    ), __METHOD__);
+                }
+                // Update count of used votes
+                $user_votes_count = self::get_user_votes_count($ID, $user, $restrict_ip ? $IP : false);
             }
-            // Update count of used votes
-            $user_votes_count = self::get_user_votes_count($ID, $user, $restrict_ip ? $IP : false);
+            elseif ($user_answers)
+                $str .= wfMsg('wikipoll-too-many-votes');
         }
-
-        $str = "<a name='poll-$ID'><p><b>$question</b></p></a>";
 
         // User passed authorization && Poll did not end && Votes available
         if ($user_votes_count < $poll_points &&
