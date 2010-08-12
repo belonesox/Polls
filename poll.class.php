@@ -175,14 +175,13 @@ class WikiPoll
               $poll_end && $poll_end <= date('Y-m-d') ||
               $authorized > 0 && !$wgUser->getID()))
         {
-            $user_answers = $_POST['answers'];
+            $votes = $_POST['answers'];
             // Just one answer
-            if ($user_answers && !is_array($user_answers))
-                $user_answers = array($user_answers => 1);
-            if ($user_answers && count($user_answers)+$user_votes_count <= $poll_points)
+            if ($votes && !is_array($votes))
+                $votes = array($votes);
+            if ($votes && count($votes)+$user_votes_count <= $poll_points)
             {
                 // Register all user votes
-                $votes = array_keys($user_answers);
                 foreach ($votes as $vote)
                 {
                     $dbw->insert('poll_vote', array(
@@ -209,46 +208,31 @@ class WikiPoll
             $action = $wgTitle->escapeLocalUrl("action=purge");
             if ($poll_points == 1)
             {
-                $block = ''; $i = 0;
-                foreach ($labels as $label)
+                $block = '';
+                foreach ($labels as $i => $label)
                 {
-                    $i++;
-                    $block .= <<<EOT
-<li>
-    <form action="#poll-{$ID}" method="POST">
-        <input type="hidden" name="poll-ID" value="{$ID}">
-        <input type="hidden" name="answers" value="{$i}">
-        <input style="color:blue;background-color:yellow" value='+' name="vote" type='submit'>&nbsp;
-        <label for="vote">{$label}</label>
-    </form>
-</li>
-EOT;
+                    $form = Xml::hidden('poll-ID', $ID);
+                    $form .= Xml::hidden('answers', $i+1);
+                    $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: yellow'));
+                    $form .= '&nbsp;';
+                    $form .= $label;
+                    $form = Xml::element('form', array('action' => '#poll-'.$ID, 'method' => 'POST'), $form);
+                    $block .= Xml::element('li', NULL, $form);
                 }
-                $str .= "<ul>$block</ul>";
+                $str .= Xml::wrapClass($block, 'wikipoll-alt', 'ul');
             }
             else
             {
                 $votes_rest = $poll_points-$user_votes_count;
                 $str .= self::parse($parser, wfMsg('wikipoll-remaining', $votes_rest));
-                $block = ''; $i = 0;
-                foreach ($labels as $label)
-                {
-                    $i++;
-                    $block .= <<<EOT
-<li>
-    <input type="checkbox" name="answers[$i]" id="answers[$i]" value='1' />
-    <label for="answers[$i]">$label</label>
-</li>
-EOT;
-                }
-                $str .= <<<EOT
-<form action="#poll-$ID" method="POST"><input type="hidden" name="poll-ID" value="$ID">
-    <ul>$block</ul>
-    <input name='vote' value='Ok' type='submit'>
-</form>
-EOT;
+                $block = '';
+                foreach ($labels as $i => $label)
+                    $block .= Xml::element('li', NULL, Xml::checkLabel($label, "answers[]", "answers-$i", array('value' => $i+1)));
+                $block = Xml::element('ul', NULL, $block);
+                $block .= Xml::hidden('poll-ID', $ID);
+                $block .= Xml::submitButton('Ok', array('name' => 'vote'));
+                $str .= Xml::element('form', array('action' => '#poll-'.$ID, 'method' => 'POST'), $block);
             }
-            $str = preg_replace('/[\n\r]+\s+/', '', trim($str));
             return $str;
         }
         // User passed authorization && Votes unavailable && Results not hidden, or poll ended
