@@ -13,6 +13,10 @@
 
 class WikiPoll
 {
+    const POLL_UNAUTH = 0;
+    const POLL_AUTH_VOTE = 1;
+    const POLL_AUTH_DISPLAY = 2;
+
     static $parserOptions;
 
     // DB schema updates
@@ -21,6 +25,15 @@ class WikiPoll
         global $wgExtNewTables;
         $wgExtNewTables[] = array("poll_votes", dirname(__FILE__) . "/poll-tables.sql");
         return true;
+    }
+
+    static function xelement($element, $attribs = null, $contents = '', $allowShortTag = true)
+    {
+        if (is_null($contents))
+            return Xml::openElement($element, $attribs);
+        elseif ($contents == '')
+            return Xml::element($element, $attribs, $contents, $allowShortTag);
+        return Xml::openElement($element, $attribs) . $contents . Xml::closeElement($element);
     }
 
     // Local parsing and HTML rendering for individual lines of wiki markup
@@ -78,7 +91,7 @@ class WikiPoll
         $labels = array();
         $values = array();
 
-        $authorized   = 0;
+        $authorized   = self::POLL_UNAUTH;
         $poll_points  = 0;
         $poll_end     = false;
         $hide_results = false;
@@ -89,24 +102,30 @@ class WikiPoll
             if ($line == 'AUTHORIZED')
             {
                 /* Display results and allow voting only for authorized users */
-                $authorized = 1;
+                $authorized = self::POLL_AUTH_VOTE;
+                continue;
+            }
+            elseif ($line == 'CHECKS')
+            {
+                /* Allow to select any number of different options (default) */
+                $poll_points = 0;
                 continue;
             }
             elseif ($line == 'AUTHORIZED_DISPLAY')
             {
                 /* Display poll options, results, and allow voting only for authorized users */
-                $authorized = 2;
+                $authorized = self::POLL_AUTH_DISPLAY;
                 continue;
             }
             elseif ($line == 'ALTERNATIVE')
             {
-                /* Alternative selection (default) */
+                /* Alternative selection */
                 $poll_points = 1;
                 continue;
             }
             elseif (preg_match('/^POINTS\s*(\d+)$/s', $line, $m))
             {
-                /* Selection of N=$m[1] options */
+                /* Selection of N=$m[1] options, allowing duplicates */
                 $poll_points = intval($m[1]);
                 continue;
             }
@@ -132,12 +151,12 @@ class WikiPoll
             break;
         }
 
-        /* Default is alternative selection */
-        if ($poll_points < 1)
-            $poll_points = 1;
+        /* Default is allowing to select any number of different options */
+        if ($poll_points < 0)
+            $poll_points = 0;
 
         /* Restrict poll display to authorized users when AUTHORIZED_DISPLAY is specified */
-        if ($authorized > 1 && !$wgUser->getID())
+        if ($authorized == self::POLL_AUTH_DISPLAY && !$wgUser->getID())
             return wfMsg('wikipoll-must-login');
 
         /* We must have at least two lines: question and at least one variant of the answer */
@@ -170,74 +189,71 @@ class WikiPoll
         $str = "<a name='poll-$ID'><p><b>$question</b></p></a>";
 
         // Action treatment
-        if ($_POST['poll-ID'] == $ID && $_POST['vote'] &&
-            !($user_votes_count >= $poll_points ||
-              $poll_end && $poll_end <= date('Y-m-d') ||
-              $authorized > 0 && !$wgUser->getID()))
+        if (($user_votes_count < ($poll_points > 0 ? $poll_points : 1)) &&  /* votes available or did not vote */
+            (!$poll_end || $poll_end > date('Y-m-d')) &&                    /* poll did not end */
+            ($authorized == self::POLL_UNAUTH || $wgUser->getID()))         /* poll is not authorized, or user is logged in */
         {
-            $votes = $_POST['answers'];
-            // Just one answer
-            if ($votes && !is_array($votes))
-                $votes = array($votes);
-            if ($votes && count($votes)+$user_votes_count <= $poll_points)
+            if ($_POST['poll-ID'] == $ID && $_POST['vote'])                 /* form is submitted to this poll */
             {
-                // Register all user votes
-                foreach ($votes as $vote)
+                $votes = $_POST['answers'];
+                if (is_array($votes))
+                    $votes = array_keys($votes);
+                elseif ($votes)
+                    $votes = array($votes); // Just one answer
+                if ($votes && ($poll_points <= 0 || count($votes)+$user_votes_count <= $poll_points))
                 {
-                    $dbw->insert('poll_vote', array(
-                        'poll_id'     => $ID,
-                        'poll_user'   => $user,
-                        'poll_ip'     => $IP,
-                        'poll_answer' => $vote,
-                        'poll_date'   => $timestamp,
-                    ), __METHOD__);
+                    // Register all user votes
+                    foreach ($votes as $vote)
+                    {
+                        if ($poll_points <= 0)
+                        {
+                            // Delete old votes for CHECKS mode
+                            $dbw->delete('poll_vote', array(
+                                'poll_id' => $ID,
+                                'poll_answer' => $vote,
+                                'poll_user='.$dbw->addQuotes($user).($restrict_ip ? ' OR poll_ip='.$dbw->addQuotes($IP) : '')
+                            ));
+                        }
+                        $dbw->insert('poll_vote', array(
+                            'poll_id'     => $ID,
+                            'poll_user'   => $user,
+                            'poll_ip'     => $IP,
+                            'poll_answer' => $vote,
+                            'poll_date'   => $timestamp,
+                        ), __METHOD__);
+                    }
+                    $dbw->commit();
+                    header("Location: ".$wgTitle->getFullUrl()."#poll-$ID");
+                    exit;
                 }
-                // Update count of used votes
-                $user_votes_count = self::get_user_votes_count($ID, $user, $restrict_ip ? $IP : false);
+                elseif ($user_answers)
+                    $str .= wfMsg('wikipoll-too-many-votes');
             }
-            elseif ($user_answers)
-                $str .= wfMsg('wikipoll-too-many-votes');
-        }
 
-        // User passed authorization && Poll did not end && Votes available
-        if ($user_votes_count < $poll_points &&
-            (!$poll_end || $poll_end > date('Y-m-d')) &&
-            (!$authorized || $wgUser->getID()))
-        {
             // Show form
             $action = $wgTitle->escapeLocalUrl("action=purge");
-            if ($poll_points == 1)
-            {
-                $block = '';
-                foreach ($labels as $i => $label)
-                {
-                    $form = Xml::hidden('poll-ID', $ID);
-                    $form .= Xml::hidden('answers', $i+1);
-                    $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: yellow'));
-                    $form .= '&nbsp;';
-                    $form .= $label;
-                    $form = Xml::element('form', array('action' => '#poll-'.$ID, 'method' => 'POST'), $form);
-                    $block .= Xml::element('li', NULL, $form);
-                }
-                $str .= Xml::wrapClass($block, 'wikipoll-alt', 'ul');
-            }
-            else
+            if ($poll_points > 1)
             {
                 $votes_rest = $poll_points-$user_votes_count;
                 $str .= self::parse($parser, wfMsg('wikipoll-remaining', $votes_rest));
-                $block = '';
-                foreach ($labels as $i => $label)
-                    $block .= Xml::element('li', NULL, Xml::checkLabel($label, "answers[]", "answers-$i", array('value' => $i+1)));
-                $block = Xml::element('ul', NULL, $block);
-                $block .= Xml::hidden('poll-ID', $ID);
-                $block .= Xml::submitButton('Ok', array('name' => 'vote'));
-                $str .= Xml::element('form', array('action' => '#poll-'.$ID, 'method' => 'POST'), $block);
             }
+            $block = '';
+            foreach ($labels as $i => $label)
+            {
+                $form = Xml::hidden('poll-ID', $ID);
+                $form .= Xml::hidden('answers', $i+1);
+                $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: #e0e0e0; border: 1px outset gray'));
+                $form .= '&nbsp;';
+                $form .= $label;
+                $form = self::xelement('form', array('action' => '#poll-'.$ID, 'method' => 'POST'), $form);
+                $block .= self::xelement('li', NULL, $form);
+            }
+            $str .= self::xelement('ul', array('class' => 'wikipoll-alt'), $block);
             return $str;
         }
         // User passed authorization && Votes unavailable && Results not hidden, or poll ended
-        elseif (($user_votes_count >= $poll_points && !$hide_results || $poll_end <= date('Y-m-d')) &&
-            (!$authorized || $wgUser->getID()))
+        elseif (($user_votes_count >= ($poll_points > 0 ? $poll_points : 1) && !$hide_results || $poll_end <= date('Y-m-d')) &&
+            ($authorized == self::POLL_UNAUTH || $wgUser->getID()))
         {
             // Show results.
             // Get votes distribution
@@ -280,11 +296,11 @@ class WikiPoll
         else
         {
             // Show poll options
-            $str .= "<ul>";
+            $str = '';
             foreach ($labels as $label)
-                $str .= "<li>$label</li>";
-            $str .= "</ul>";
-            if (!$authorized || $wgUser->getID())
+                $str .= self::xelement('li', NULL, $label);
+            $str = self::xelement('ul', NULL, $str);
+            if ($authorized == self::POLL_UNAUTH || $wgUser->getID())
             {
                 // "Total users voted" for authorized users
                 $n = $dbw->selectField('poll_vote',
