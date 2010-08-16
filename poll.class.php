@@ -87,7 +87,7 @@ class WikiPoll
 
         $parser->disableCache();
 
-        $lines = split("\n", trim($input));
+        $lines = explode("\n", trim($input));
         $labels = array();
         $values = array();
 
