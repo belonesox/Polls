@@ -23,6 +23,7 @@ $wgExtensionCredits['parserhook'][] = array(
 $dir = dirname(__FILE__) . '/';
 $wgExtensionMessagesFiles['WikiPoll'] = $dir . 'poll.i18n.php';
 $wgAutoloadClasses['WikiPoll'] = $dir . 'poll.class.php';
+$wgAutoloadClasses['BAR_GRAPH'] = $dir . 'graphs.inc.php';
 $wgExtensionFunctions[] = 'wfPoll';
 $wgHooks['LoadExtensionSchemaUpdates'][] = 'WikiPoll::LoadExtensionSchemaUpdates';
 
