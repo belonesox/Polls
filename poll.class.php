@@ -277,8 +277,15 @@ class WikiPoll
         );
         $this->result = array_pad(array(), count($this->answers), 0);
         while ($row = $dbr->fetchRow($res))
-            $this->result[$row[0]-1] += $row[1];
+            $this->result[$row['poll_answer'] ? $row['poll_answer']-1 : 'NONE'] += $row[1];
         $dbr->freeResult($res);
+        $none = $this->result['NONE'];
+        unset($this->result['NONE']);
+        if ($none)
+        {
+            $this->result[] = $none;
+            $this->answers[] = wfMsg('wikipoll-none-of-above');
+        }
     }
 
     // Show results
