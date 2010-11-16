@@ -17,6 +17,7 @@ class WikiPoll
     const POLL_AUTH_VOTE = 1;
     const POLL_AUTH_DISPLAY = 2;
 
+    var $revote = false;
     var $ID = NULL;
     var $is_checks = true, $points = 0, $end = NULL;
     var $authorized = 0, $hide_results = false, $restrict_ip = false;
@@ -151,6 +152,17 @@ class WikiPoll
                 /* Restrict voting by IP, not only by username */
                 $self->restrict_ip = true;
             }
+            elseif (preg_match('/^UNSAFE[\s_]*ID=(\S+)$/s', $line, $m))
+            {
+                /* Unsafe poll, allows to overwrite answers later */
+                $unsafe_name = preg_match('/\W/', $m[1]) || strlen($unsafe_name) > 31;
+                $self->ID = 'X'.($unsafe_name ? substr(md5($m[1]), 1) : $m[1]);
+            }
+            elseif ($line == 'REVOTE' || $line == 'ALLOW_RECALL' || $line == 'ALLOW_REVOTE')
+            {
+                /* Allow to recall answers */
+                $self->revote = true;
+            }
             elseif ($line != "")
                 break;
             array_shift($lines);
@@ -182,8 +194,9 @@ class WikiPoll
         $html = '';
         if ($this->too_many_votes)
             $html .= wfMsg('wikipoll-too-many-votes');
-        $html .= '<a name="poll-'.$this->ID.'"><p><b>'.$this->question.'</b></p></a>';
+        $html .= '<p><a name="poll-'.$this->ID.'"><b>'.$this->question.'</b></a></p>';
         $uv = $this->get_user_votes_count();
+        $results = false;
         if ($this->authorized != self::POLL_UNAUTH && !$wgUser->getID())
         {
             if ($self->authorized == self::POLL_AUTH_DISPLAY)
@@ -194,6 +207,7 @@ class WikiPoll
                 $html .= $this->html_options();
                 $html .= wfMsg('wikipoll-must-login-to-vote');
             }
+            return $html;
         }
         elseif ($this->end && date('Y-m-d') >= $this->end)
         {
@@ -205,6 +219,7 @@ class WikiPoll
                 $html .= $this->html_form_checks();
             else
                 $html .= $this->html_form_points();
+            return $html;
         }
         elseif (!$this->hide_results)
         {
@@ -214,7 +229,11 @@ class WikiPoll
         {
             $html .= $this->html_options();
             $html .= $this->html_total();
+            return $html;
         }
+        /* Show revote link */
+        if ($this->revote)
+            $html .= '<p><a href="?poll-ID='.$this->ID.'&recall=1#poll-'.$this->ID.'">'.wfMsg('wikipoll-recall').'</a></p>';
         return $html;
     }
 
@@ -228,16 +247,27 @@ class WikiPoll
     function handle_postdata()
     {
         global $wgTitle;
-        if (!$_POST['poll-ID'] || $_POST['poll-ID'] != $this->ID)
+        if (!$_REQUEST['poll-ID'] || $_REQUEST['poll-ID'] != $this->ID)
             return;
-        $votes = $_POST['answers'];
+        $dbw = wfGetDB(DB_MASTER);
+        if ($_REQUEST['recall'])
+        {
+            // Delete old votes
+            $dbw->delete('poll_vote', array(
+                'poll_id' => $this->ID,
+                $this->user_where($dbw)
+            ));
+            $dbw->commit();
+            header("Location: ".$wgTitle->getFullUrl()."#poll-".$this->ID);
+            exit;
+        }
+        $votes = $_REQUEST['answers'];
         if (!is_array($votes))
             $votes = array($votes); // Just one answer
         $uv = $this->get_user_votes_count();
         if ($votes && ($this->is_checks || count($votes)+$uv <= $this->points))
         {
             $timestamp = wfTimestamp(TS_DB);
-            $dbw = wfGetDB(DB_MASTER);
             if ($this->is_checks)
             {
                 // Delete old votes for CHECKS mode

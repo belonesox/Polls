@@ -12,6 +12,7 @@ $messages['en'] = array(
     'wikipoll-remaining'                 => 'You have $1 point{{PLURAL:$1||s}} to vote.',
     'wikipoll-too-many-votes'            => '<b>Too many votes selected.</b> ',
     'wikipoll-none-of-above'             => 'None of the above',
+    'wikipoll-recall'                    => 'Recall vote',
     'wikipoll-voted-count'               => '<div style="display: inline-block; background-color: #7fffd4; border: 1px solid #0000ff; padding: 15px">
 <div style="background-color: white">
 * You have already answered to this poll.{{#if:$2|&nbsp;Poll results will be opened $2.|}}&nbsp;
@@ -30,6 +31,7 @@ $messages['ru'] = array(
     'wikipoll-remaining'                 => 'Вы можете использовать $1 голос{{PLURAL:$1||ов|а}}.',
     'wikipoll-too-many-votes'            => '<b>Выбрано слишком много голосов.</b> ',
     'wikipoll-none-of-above'             => 'Ничего из перечисленного',
+    'wikipoll-recall'                    => 'Отозвать свой голос',
     'wikipoll-voted-count'               => '<div style="display: inline-block; background-color: #7fffd4; border: 1px solid #0000ff; padding: 15px; margin: 8px 0">
 <div style="background-color: white">
 * Вы уже ответили на этот опрос.{{#if:$2|&nbsp;Результаты будут доступны $2.|}}&nbsp;
