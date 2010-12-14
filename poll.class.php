@@ -247,7 +247,8 @@ class WikiPoll
     function handle_postdata()
     {
         global $wgTitle;
-        if (!$_REQUEST['poll-ID'] || $_REQUEST['poll-ID'] != $this->ID)
+        if (!$_REQUEST['poll-ID'] || $_REQUEST['poll-ID'] != $this->ID ||
+            !$_REQUEST['vote'])
             return;
         $dbw = wfGetDB(DB_MASTER);
         if ($_REQUEST['recall'])
@@ -408,7 +409,7 @@ class WikiPoll
         }
         $form = self::xelement('ul', array('class' => 'wikipoll-alt'), $form);
         $form = Xml::hidden('poll-ID', $this->ID) . $form;
-        $form .= Xml::submitButton(wfMsg('wikipoll-submit'));
+        $form .= Xml::submitButton(wfMsg('wikipoll-submit'), array('name' => 'vote'));
         $form = self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
         return $form;
     }
