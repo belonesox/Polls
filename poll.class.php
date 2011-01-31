@@ -247,8 +247,7 @@ class WikiPoll
     function handle_postdata()
     {
         global $wgTitle;
-        if (!$_REQUEST['poll-ID'] || $_REQUEST['poll-ID'] != $this->ID ||
-            !$_REQUEST['vote'])
+        if (!$_REQUEST['poll-ID'] || $_REQUEST['poll-ID'] != $this->ID)
             return;
         $dbw = wfGetDB(DB_MASTER);
         if ($_REQUEST['recall'])
@@ -262,6 +261,8 @@ class WikiPoll
             header("Location: ".$wgTitle->getFullUrl()."#poll-".$this->ID);
             exit;
         }
+        elseif (!$_REQUEST['vote'])
+            return;
         $votes = $_REQUEST['answers'];
         if (!is_array($votes))
             $votes = array($votes); // Just one answer
