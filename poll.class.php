@@ -73,6 +73,12 @@ class WikiPoll
             $this->parserOptions = new ParserOptions();
             $this->parserOptions->setEditSection(false);
             $this->parserOptions->setTidy(false);
+            // The Cite extension requires <references /> if a <ref>
+            // was anywhere inside previously parsed text,
+            // only when isSectionPreview == false
+            // This generates error messages if <ref> was used even outside
+            // the poll itself.
+            $this->parserOptions->setIsSectionPreview(true);
         }
         $old = $this->parser->mOptions;
         $parserOutput = $this->parser->parse($line, $this->parser->mTitle ? $this->parser->mTitle : $wgTitle, $this->parserOptions, false, false);
