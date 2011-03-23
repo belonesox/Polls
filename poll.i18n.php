@@ -19,6 +19,7 @@ $messages['en'] = array(
 * Total $1 user{{PLURAL:$1||s}} voted.
 </div>
 </div>',
+    'wikipoll-points'                    => '<span style="color: #0080ff"> ($1 point{{PLURAL:$1||s}} used)</span>',
 );
 
 $messages['ru'] = array(
@@ -38,4 +39,5 @@ $messages['ru'] = array(
 * Всего проголосовал{{PLURAL:$1||о}} $1 человек.
 </div>
 </div>',
+    'wikipoll-points'                    => '<span style="color: #0080ff"> (отдан{{PLURAL:$1||о}} $1 голос{{PLURAL:$1||ов|а}})</span>',
 );

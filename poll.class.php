@@ -87,16 +87,19 @@ class WikiPoll
     }
 
     // get count of used votes
-    function get_user_votes_count()
+    function get_user_votes()
     {
-        if ($this->user_votes_count === NULL)
+        if ($this->user_votes === NULL)
         {
             $dbr = wfGetDB(DB_SLAVE);
             $where = array('poll_id' => $this->ID);
             $where[] = $this->user_where($dbr);
-            $this->user_votes_count = $dbr->selectField('poll_vote', 'count(1)', $where, __METHOD__);
+            $res = $dbr->select('poll_vote', 'poll_answer', $where, __METHOD__);
+            $this->user_votes = array();
+            foreach ($res as $row)
+                $this->user_votes[] = $row->poll_answer;
         }
-        return $this->user_votes_count;
+        return $this->user_votes;
     }
 
     // create new poll object from text
@@ -201,7 +204,7 @@ class WikiPoll
         if ($this->too_many_votes)
             $html .= wfMsg('wikipoll-too-many-votes');
         $html .= '<p><a name="poll-'.$this->ID.'"><b>'.$this->question.'</b></a></p>';
-        $uv = $this->get_user_votes_count();
+        $uv = $this->get_user_votes();
         $results = false;
         if ($this->authorized != self::POLL_UNAUTH && !$wgUser->getID())
         {
@@ -219,7 +222,7 @@ class WikiPoll
         {
             $html .= $this->html_results();
         }
-        elseif ($this->is_checks && !$uv || $uv < $this->points)
+        elseif ($this->is_checks && !$uv || count($uv) < $this->points)
         {
             if ($this->is_checks)
                 $html .= $this->html_form_checks();
@@ -272,8 +275,8 @@ class WikiPoll
         $votes = $_REQUEST['answers'];
         if (!is_array($votes))
             $votes = array($votes); // Just one answer
-        $uv = $this->get_user_votes_count();
-        if ($votes && ($this->is_checks || count($votes)+$uv <= $this->points))
+        $uv = $this->get_user_votes();
+        if ($votes && ($this->is_checks || count($votes)+count($uv) <= $this->points))
         {
             $timestamp = wfTimestamp(TS_DB);
             if ($this->is_checks)
@@ -380,13 +383,16 @@ class WikiPoll
     {
         global $wgTitle;
         $action = $wgTitle->escapeLocalUrl("action=purge");
-        $uv = $this->get_user_votes_count();
+        $uv = $this->get_user_votes();
         $str = '';
         if ($this->points > 1)
         {
-            $votes_rest = $this->points-$uv;
+            $votes_rest = $this->points-count($uv);
             $str .= $this->parse(wfMsg('wikipoll-remaining', $votes_rest));
         }
+        $i_voted = array();
+        foreach ($uv as $n)
+            $i_voted[$n]++;
         $block = '';
         foreach ($this->answers as $i => $label)
         {
@@ -395,6 +401,8 @@ class WikiPoll
             $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: #e0e0e0; border: 1px outset gray'));
             $form .= '&nbsp;';
             $form .= $label;
+            if ($i_voted[$i+1])
+                $form .= wfMsgExt('wikipoll-points', 'parseinline', $i_voted[$i+1]);
             $form = self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
             $block .= self::xelement('li', NULL, $form);
         }
