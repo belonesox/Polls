@@ -402,7 +402,7 @@ class WikiPoll
             $form .= '&nbsp;';
             $form .= $label;
             if ($i_voted[$i+1])
-                $form .= $this->parse(wfMsg('wikipoll-points', 'parseinline', $i_voted[$i+1]));
+                $form .= $this->parse(wfMsgNoTrans('wikipoll-points', $i_voted[$i+1]));
             $form = self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
             $block .= self::xelement('li', NULL, $form);
         }
