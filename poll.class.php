@@ -18,7 +18,7 @@ class WikiPoll
     const POLL_AUTH_DISPLAY = 2;
 
     var $revote = false;
-    var $ID = NULL;
+    var $ID = NULL, $uniqueID = false;
     var $is_checks = true, $points = 0, $end = NULL;
     var $authorized = 0, $hide_results = false, $restrict_ip = false;
 
@@ -167,6 +167,12 @@ class WikiPoll
                 $unsafe_name = preg_match('/\W/', $m[1]) || strlen($unsafe_name) > 31;
                 $self->ID = 'X'.($unsafe_name ? substr(md5($m[1]), 1) : $m[1]);
             }
+            elseif ($line == 'PAGENAME_ID' || $line == 'UNIQUE')
+            {
+                /* Append page name hash to the ID to make polls with equal ID
+                   differ for different wiki pages */
+                $self->uniqueID = true;
+            }
             elseif ($line == 'REVOTE' || $line == 'ALLOW_RECALL' || $line == 'ALLOW_REVOTE')
             {
                 /* Allow to recall answers */
@@ -176,6 +182,8 @@ class WikiPoll
                 break;
             array_shift($lines);
         }
+        if ($self->uniqueID)
+            $self->ID = 'Y'.substr(md5($self->ID . '-' . $parser->mTitle->getPrefixedText()), 1);
         if ($self->points < 1)
             $self->points = 1;
         $self->question = $self->parse(trim(array_shift($lines)));
