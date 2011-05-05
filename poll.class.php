@@ -1,6 +1,6 @@
 <?php
 
-/*
+/**
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -11,14 +11,87 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU General Public License 2.0 or later
  */
 
+class SpecialPolls extends SpecialPage
+{
+    static $curId;
+    static $curPoll;
+    function __construct()
+    {
+        SpecialPage::SpecialPage('Polls', 'viewpolls');
+    }
+    function execute($par)
+    {
+        global $wgRequest, $wgOut, $wgUser, $wgParser, $wgTitle;
+        if (!$this->userCanExecute($wgUser))
+        {
+            $this->displayRestrictionError();
+            return;
+        }
+        if (($p = strrpos($par, '/')) !== false)
+        {
+            $page = Title::newFromText(substr($par, 0, $p));
+            $id = substr($par, $p+1);
+        }
+        else
+        {
+            $page = Title::newFromText($wgRequest->getVal('pollpage'));
+            $id = $wgRequest->getVal('id');
+        }
+        if (preg_match('/\W/', $id) || !$page || !$page->exists())
+        {
+            $wgOut->setPageTitle(wfMsg('wikipoll-no-id-title'));
+            $wgOut->addHTML(wfMsgNoTrans(
+                'wikipoll-no-id-text',
+                htmlspecialchars($wgTitle->getLocalUrl()),
+                htmlspecialchars($page ? $page->getPrefixedText() : ''),
+                htmlspecialchars($id)
+            ));
+            return;
+        }
+        if (!$par)
+        {
+            $wgOut->redirect(Title::newFromText($wgTitle->getPrefixedText().'/'.$page.'/'.$id)->getFullUrl());
+            return;
+        }
+        wfLoadExtensionMessages('WikiPoll');
+        $page = new Article($page);
+        self::$curId = $id;
+        $wgParser->disableCache();
+        $wgParser->setHook('poll', 'SpecialPolls::adminPoll');
+        $options = ParserOptions::newFromUser($wgUser);
+        $wgParser->parse($page->getContent(), $page->getTitle(), $options);
+        if (!self::$curPoll)
+        {
+            $wgOut->setPageTitle(wfMsg('wikipoll-not-found-title'));
+            $wgOut->addHTML(wfMsgNoTrans(
+                'wikipoll-not-found-text',
+                htmlspecialchars($wgTitle->getLocalUrl()),
+                htmlspecialchars($page->getTitle()->getPrefixedText()),
+                htmlspecialchars($id)
+            ));
+            return;
+        }
+        $id = self::$curPoll->ID;
+        $wgOut->setPageTitle(wfMsg('wikipoll-admin-title', $page->getTitle()->getPrefixedText(), $id));
+        $wgOut->addHTML(self::$curPoll->html_admin());
+    }
+    static function adminPoll($input, $attr, $parser)
+    {
+        $poll = WikiPoll::newFromText($parser, $input);
+        if (is_object($poll) && (!self::$curPoll || $poll->ID == self::$curId))
+            self::$curPoll = $poll;
+        return '';
+    }
+}
+
 class WikiPoll
 {
     const POLL_UNAUTH = 0;
     const POLL_AUTH_VOTE = 1;
     const POLL_AUTH_DISPLAY = 2;
 
-    var $revote = false;
-    var $ID = NULL, $uniqueID = false;
+    var $revote = false, $open = false;
+    var $ID = NULL, $uniqueID = false, $unsafe = false;
     var $is_checks = true, $points = 0, $end = NULL;
     var $authorized = 0, $hide_results = false, $restrict_ip = false;
 
@@ -27,6 +100,8 @@ class WikiPoll
     var $result;
 
     var $question, $answers;
+
+    var $parser, $parserOptions;
 
     // Identical to Xml::element, but does no htmlspecialchars()
     static function xelement($element, $attribs = null, $contents = '', $allowShortTag = true)
@@ -59,7 +134,6 @@ class WikiPoll
     }
 
     // Local parsing and HTML rendering for individual lines of wiki markup
-    var $parser, $parserOptions;
     function parse($line)
     {
         global $wgTitle;
@@ -165,6 +239,7 @@ class WikiPoll
             {
                 /* Unsafe poll, allows to overwrite answers later */
                 $unsafe_name = preg_match('/\W/', $m[1]) || strlen($unsafe_name) > 31;
+                $self->unsafe = true;
                 $self->ID = 'X'.($unsafe_name ? substr(md5($m[1]), 1) : $m[1]);
             }
             elseif ($line == 'PAGENAME_ID' || $line == 'UNIQUE')
@@ -177,6 +252,11 @@ class WikiPoll
             {
                 /* Allow to recall answers */
                 $self->revote = true;
+            }
+            elseif ($line == 'OPEN')
+            {
+                /* Display all voters */
+                $self->open = true;
             }
             elseif ($line != "")
                 break;
@@ -204,6 +284,13 @@ class WikiPoll
         return $self;
     }
 
+    // return HTML for question and anchor
+    function html_question()
+    {
+        $html = '<p><a name="poll-'.$this->ID.'" title="ID: '.$this->ID.'"><b>'.$this->question.'</b></a></p>';
+        return $html;
+    }
+
     // return HTML code of rendered poll / form
     function render()
     {
@@ -211,7 +298,7 @@ class WikiPoll
         $html = '';
         if ($this->too_many_votes)
             $html .= wfMsg('wikipoll-too-many-votes');
-        $html .= '<p><a name="poll-'.$this->ID.'"><b>'.$this->question.'</b></a></p>';
+        $html .= $this->html_question();
         $uv = $this->get_user_votes();
         $results = false;
         if ($this->authorized != self::POLL_UNAUTH && !$wgUser->getID())
@@ -248,7 +335,7 @@ class WikiPoll
             $html .= $this->html_total();
             return $html;
         }
-        /* Show revote link */
+        /* Show revote link after results */
         if ($this->revote)
             $html .= '<p><a href="?poll-ID='.$this->ID.'&recall=1#poll-'.$this->ID.'">'.wfMsg('wikipoll-recall').'</a></p>';
         return $html;
@@ -314,26 +401,34 @@ class WikiPoll
             $this->too_many_votes = true;
     }
 
-    // Get votes distribution
+    // Get votes distribution and voters
     function get_results()
     {
         $dbr = wfGetDB(DB_SLAVE);
         $res = $dbr->select('poll_vote',
-            'poll_answer, count(1) votes',
+            'poll_answer, poll_user, count(1) votes',
             array('poll_id' => $this->ID),
             __METHOD__,
-            array('GROUP BY' => '1')
+            array('GROUP BY' => 'poll_answer, poll_user')
         );
         $this->result = array_pad(array(), count($this->answers), 0);
-        while ($row = $dbr->fetchRow($res))
-            $this->result[$row['poll_answer'] ? $row['poll_answer']-1 : 'NONE'] += $row[1];
-        $dbr->freeResult($res);
-        $none = $this->result['NONE'];
-        unset($this->result['NONE']);
-        if ($none)
+        $this->voters = array();
+        $this->total = 0;
+        foreach ($res as $row)
         {
-            $this->result[] = $none;
+            $a = $row->poll_answer ? $row->poll_answer-1 : 'NONE';
+            $this->result[$a] += $row->votes;
+            $this->total += $row->votes;
+            $this->voters[$a][$row->poll_user] = $row->votes;
+        }
+        $dbr->freeResult($res);
+        if ($this->result['NONE'])
+        {
+            $this->voters[count($this->result)] = $this->voters['NONE'];
+            $this->result[] = $this->result['NONE'];
             $this->answers[] = wfMsg('wikipoll-none-of-above');
+            unset($this->result['NONE']);
+            unset($this->voters['NONE']);
         }
     }
 
@@ -342,27 +437,27 @@ class WikiPoll
     {
         if (!$this->result)
             $this->get_results();
-        $graph = new BAR_GRAPH('hBar');
-        $graph->showValues = 1;
-        $graph->barWidth = 20;
-        $graph->labelSize = 12;
-        $graph->absValuesSize = 12;
-        $graph->percValuesSize = 12;
-        $graph->graphBGColor = 'Aquamarine';
-        $graph->barColors = 'Gold';
-        $graph->barBGColor = 'Azure';
-        $graph->labelColor = 'black';
-        $graph->labelBGColor = 'LemonChiffon';
-        $graph->absValuesColor = '#000000';
-        $graph->absValuesBGColor = 'Cornsilk';
-        $graph->graphPadding = 15;
-        $graph->graphBorder = '1px solid blue';
-        $graph->values = $this->result;
-        $graph->labels = $this->answers;
-        $s = $graph->create();
-        $s = str_replace("<table","\n<table",$s);
-        $s = str_replace("<td","\n<td",$s);
-        $s = str_replace("<tr","\n<tr",$s);
+        $s = '';
+        $max = max($this->result);
+        foreach ($this->answers as $i => $a)
+        {
+            $perc = round($this->result[$i]*100/$this->total);
+            $width = round($this->result[$i]*100/$max);
+            $tr = '<td style="background-color: #fffacd; border: 1px outset #ffea95; padding: 0 2px">'.$a.'</td>';
+            $tr .= '<td style="background-color: #fff8dc; border: 1px outset #ffea95; padding: 0 2px">'.$this->result[$i].'</td>';
+            $tr .= '<td style="padding-right: 1em"><table style="height: 100%"><tr>' .
+                '<td style="width: '.$width.'px; border: 1px outset #ffea95; background: #ffcb00">' .
+                '</td><td>'.$perc.'%</td></tr></table></td>';
+            if ($this->open && ($voters = $this->voters[$i]))
+            {
+                foreach ($voters as $v => &$n)
+                    $n = htmlspecialchars($v) . ($n > 1 ? ' ('.$n.')' : '');
+                $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', ', $voters).'</td>';
+            }
+            $s .= '<tr>'.$tr.'</tr>';
+        }
+        $s = '<table style="background-color: white; border: 1px solid #a0c0ff" cellspacing="2" cellpadding="0">'.$s.'</table>';
+        $s = '<table style="background-color: #c0f0ff; border: 1px solid #0000ff"><tr><td style="padding: 15px">'.$s.'</td></tr></table>'; // was 7fffd4
         return $s;
     }
 
@@ -373,7 +468,7 @@ class WikiPoll
         $str = '';
         foreach ($this->answers as $a)
             $str .= self::xelement('li', NULL, $a);
-        $str = self::xelement('ul', NULL, $str);
+        $str = self::xelement('ol', NULL, $str);
         return $str;
     }
 
@@ -396,6 +491,8 @@ class WikiPoll
         if ($this->points > 1)
         {
             $votes_rest = $this->points-count($uv);
+            if ($this->open)
+                $str .= wfMsgNoTrans('wikipoll-warning-open').' ';
             $str .= $this->parse(wfMsg('wikipoll-remaining', $votes_rest));
         }
         $i_voted = array();
@@ -435,5 +532,78 @@ class WikiPoll
         $form .= Xml::submitButton(wfMsg('wikipoll-submit'), array('name' => 'vote'));
         $form = self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
         return $form;
+    }
+
+    // Poll text in admin mode (with voters table)
+    function html_admin()
+    {
+        $this->get_results();
+        $html = '';
+        $html .= $this->html_flags();
+        $html .= $this->html_question();
+        $open = $this->open;
+        $this->open = true;
+        $html .= $this->html_results();
+        $this->open = $open;
+        $html .= $this->html_votes_table();
+        return $html;
+    }
+
+    // Poll options (metadata)
+    function html_flags()
+    {
+        global $wgUser;
+        $flags = array();
+        if ($this->parser && ($t = $this->parser->mTitle))
+            $flags[] = array('title', $wgUser->getSkin()->link($t));
+        $flags[] = array('id', $this->ID);
+        $flags[] = $this->unsafe ? 'unsafe' : 'safe';
+        $flags[] = $this->uniqueID ? 'unique' : 'global';
+        $flags[] = $this->is_checks ? 'checks' : ($this->points == 1 ? 'alternative' : array('points', $this->points));
+        $flags[] = !$this->authorized ? 'unauth' : ($this->authorized == 1 ? 'auth-vote' : 'auth-display');
+        $flags[] = $this->restrict_ip ? 'ip-enabled' : 'ip-disabled';
+        $flags[] = $this->open ? 'open' : 'closed';
+        $flags[] = $this->revote ? 'revote' : 'no-revote';
+        if ($this->end)
+            $flags[] = array($this->hide_results ? 'end-hidden' : 'end-shown', $this->end);
+        $html = '';
+        foreach ($flags as $f)
+        {
+            if (!is_array($f))
+                $f = array($f);
+            $html .= '<li>'.wfMsgNoTrans('wikipoll-flags-'.$f[0], $f[1]).'</li>';
+        }
+        $html = '<ul>'.$html.'</ul>';
+        return $html;
+    }
+
+    // Poll result table with all user names, IPs, vote dates...
+    function html_votes_table()
+    {
+        $dbr = wfGetDB(DB_SLAVE);
+        $res = $dbr->select(
+            'poll_vote', '*', array('poll_id' => $this->ID), __METHOD__,
+            array('ORDER BY' => 'poll_date')
+        );
+        $cols = array('date', 'user', 'ip', 'answer');
+        $html = '<tr>';
+        foreach ($cols as $col)
+            $html .= '<th>'.wfMsg("wikipoll-col-$col").'</th>';
+        $html .= '</tr>';
+        $anon = wfMsg('wikipoll-anonymous');
+        foreach ($res as $row)
+        {
+            if ($row->ip == $row->user)
+                $row->user = $anon;
+            $tr = '';
+            foreach ($cols as $col)
+            {
+                $col = "poll_$col";
+                $tr .= '<td>'.htmlspecialchars($row->$col).'</td>';
+            }
+            $html .= '<tr>'.$tr.'</tr>';
+        }
+        $html = '<table class="wikitable">'.$html.'</table>';
+        return $html;
     }
 }
