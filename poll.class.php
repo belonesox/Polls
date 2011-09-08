@@ -96,7 +96,7 @@ class WikiPoll
     var $authorized = 0, $hide_results = false, $restrict_ip = false;
 
     var $username, $userip;
-    var $user_votes_count, $too_many_votes;
+    var $user_votes, $too_many_votes;
     var $result;
 
     var $question, $answers;
@@ -351,7 +351,7 @@ class WikiPoll
     function handle_postdata()
     {
         global $wgTitle;
-        if (!$_REQUEST['poll-ID'] || $_REQUEST['poll-ID'] != $this->ID)
+        if (empty($_REQUEST['poll-ID']) || $_REQUEST['poll-ID'] != $this->ID)
             return;
         $dbw = wfGetDB(DB_MASTER);
         if ($_REQUEST['recall'])
@@ -506,7 +506,7 @@ class WikiPoll
             $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: #e0e0e0; border: 1px outset gray'));
             $form .= '&nbsp;';
             $form .= $label;
-            if ($i_voted[$i+1])
+            if (!empty($i_voted[$i+1]))
                 $form .= $this->parse(wfMsgNoTrans('wikipoll-points', $i_voted[$i+1]));
             $form = self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
             $block .= self::xelement('li', NULL, $form);
