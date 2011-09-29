@@ -94,6 +94,7 @@ class WikiPoll
     var $ID = NULL, $uniqueID = false, $unsafe = false;
     var $is_checks = true, $points = 0, $end = NULL;
     var $authorized = 0, $hide_results = false, $restrict_ip = false;
+    var $emailvotes = false;
 
     var $username, $userip;
     var $user_votes, $too_many_votes;
@@ -129,7 +130,7 @@ class WikiPoll
         $poll = WikiPoll::newFromText($parser, $input);
         if (!is_object($poll))
             return $poll;
-        $poll->handle_postdata();
+        $poll->handle_postdata($parser->getTitle());
         return $poll->render();
     }
 
@@ -235,10 +236,15 @@ class WikiPoll
                 /* Restrict voting by IP, not only by username */
                 $self->restrict_ip = true;
             }
+            elseif (preg_match('/^VOTES(?:_TO_|2)EMAIL\D+(\d+)/', $line, $m))
+            {
+                /* Send email to page watchers when there are at least N votes */
+                $self->emailvotes = intval($m[1]);
+            }
             elseif (preg_match('/^UNSAFE[\s_]*ID=(\S+)$/s', $line, $m))
             {
                 /* Unsafe poll, allows to overwrite answers later */
-                $unsafe_name = preg_match('/\W/', $m[1]) || strlen($unsafe_name) > 31;
+                $unsafe_name = preg_match('/\W/', $m[1]) || strlen($m[1]) > 31;
                 $self->unsafe = true;
                 $self->ID = 'X'.($unsafe_name ? substr(md5($m[1]), 1) : $m[1]);
             }
@@ -281,6 +287,8 @@ class WikiPoll
             /* HIDE_RESULTS requires END_POLL */
             return wfMsg('wikipoll-results-hidden-but-no-end');
         }
+        if ($self->emailvotes < 0 || $self->hide_results && date('Y-m-d') < $self->end)
+            $self->emailvotes = false;
         return $self;
     }
 
@@ -347,10 +355,9 @@ class WikiPoll
         return 'poll_user='.$db->addQuotes($this->username).($this->restrict_ip ? ' OR poll_ip='.$db->addQuotes($this->userip) : '');
     }
 
-    // Handle POST data
-    function handle_postdata()
+    // Handle POST data, for poll from page $title
+    function handle_postdata($title)
     {
-        global $wgTitle;
         if (empty($_REQUEST['poll-ID']) || $_REQUEST['poll-ID'] != $this->ID)
             return;
         $dbw = wfGetDB(DB_MASTER);
@@ -362,7 +369,7 @@ class WikiPoll
                 $this->user_where($dbw)
             ));
             $dbw->commit();
-            header("Location: ".$wgTitle->getFullUrl()."#poll-".$this->ID);
+            header("Location: ".$title->getFullUrl()."#poll-".$this->ID);
             exit;
         }
         elseif (!$_REQUEST['vote'])
@@ -394,11 +401,41 @@ class WikiPoll
                 );
             $dbw->insert('poll_vote', $rows, __METHOD__);
             $dbw->commit();
-            header("Location: ".$wgTitle->getFullUrl()."#poll-".$this->ID);
+            // If there is more than VOTES_TO_EMAIL, notify watchers
+            if ($this->emailvotes !== false && count($votes)+count($uv) >= $this->emailvotes)
+                $this->notify(count($votes)+count($uv), $title);
+            header("Location: ".$title->getFullUrl()."#poll-".$this->ID);
             exit;
         }
         elseif ($uv)
             $this->too_many_votes = true;
+    }
+
+    // Notify $title's watchers about this poll by email
+    function notify($nvotes, $title)
+    {
+        $from = new MailAddress($wgPasswordSender, 'WikiPolls');
+        $ntext = $this->parse(wfMsgNoTrans('wikipoll-email-nvotes', $nvotes));
+        $subject = wfMsg('wikipoll-email-subject', $this->question, mb_strtolower($ntext));
+        $body = wfMsgNoTrans(
+            defined('MEDIAWIKI_HAVE_HTML_EMAIL') ? 'wikipoll-email-html' : 'wikipoll-email-text',
+            $ntext,
+            $this->question,
+            $title->getPrefixedText(),
+            $title->getFullUrl(),
+            $this->emailvotes,
+            $this->html_results()
+        );
+        $dbr = wfGetDB(DB_SLAVE);
+        $res = $dbr->select(array('watchlist', 'user'), 'user.*', array(
+            'wl_namespace' => $title->getNamespace(),
+            'wl_title' => $title->getDBkey(),
+            'user_id=wl_user',
+            'user_email!=\'\'',
+            'user_email_authenticated IS NOT NULL',
+        ), __METHOD__);
+        foreach ($res as $row)
+            UserMailer::send(new MailAddress($row->user_email), $from, $subject, $body);
     }
 
     // Get votes distribution and voters
@@ -422,7 +459,7 @@ class WikiPoll
             $this->voters[$a][$row->poll_user] = $row->votes;
         }
         $dbr->freeResult($res);
-        if ($this->result['NONE'])
+        if (!empty($this->result['NONE']))
         {
             $this->voters[count($this->result)] = $this->voters['NONE'];
             $this->result[] = $this->result['NONE'];

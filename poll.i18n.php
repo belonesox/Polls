@@ -8,7 +8,7 @@ $messages['en'] = array(
     'wikipoll-must-login-to-vote'       => '<p><b><font color="red">You must be logged in to vote.</font></b></p>',
     'wikipoll-empty'                    => '<b><font color="red">Error: poll is empty.</font></b>',
     'wikipoll-submit'                   => 'Vote',
-    'wikipoll-results-hidden-but-no-end' => '<b><font color="red">Error: poll results would be hidden forever, since HIDE_RESULTS were specified without poll end marker END_POLL YYYY-MM-DD.</font></b>',
+    'wikipoll-results-hidden-but-no-end' => '<b><font color="red">Error: poll results will be hidden forever, because HIDE_RESULTS are specified without poll end marker END_POLL YYYY-MM-DD.</font></b>',
     'wikipoll-remaining'                => 'You have $1 point{{PLURAL:$1||s}} to vote.',
     'wikipoll-too-many-votes'           => '<b>Too many votes selected.</b> ',
     'wikipoll-none-of-above'            => 'None of the above',
@@ -71,6 +71,19 @@ ID: <input type="text" name="id" value="$3" /> (optional)
     'wikipoll-anonymous'                => 'Anonymous',
     'wikipoll-col-ip'                   => 'IP address',
     'wikipoll-col-answer'               => 'Option number',
+
+    'wikipoll-email-subject'            => '[WikiPoll] $1 - $2!',
+    'wikipoll-email-nvotes'             => '{{PLURAL:$1|There is $1 vote|There are $1 votes}}',
+    'wikipoll-email-html'               =>
+'<body>
+<p>$1 to poll "$2" on the page <a href="$4">$3</a>, which exceeds or is equal to email notification limit ($5).</p>
+<p>The results are:</p>
+$6
+<p><i>You receive this message because you\'re watching the page <a href="$4">$3</a>.</i></p>
+</body>',
+    'wikipoll-email-text'               => '$1 to poll "$2" on the page "$3", which exceeds or is equal to email notification limit ($5).
+Check poll results on the page: $4
+You receive this message because you\'re watching the page.',
 );
 
 $messages['ru'] = array(
@@ -141,4 +154,16 @@ ID: <input type="text" name="id" value="$3" />
     'wikipoll-anonymous'                => 'Анонимный',
     'wikipoll-col-ip'                   => 'IP-адрес',
     'wikipoll-col-answer'               => 'Номер ответа',
+
+    'wikipoll-email-nvotes'             => '{{PLURAL:$1|Набран $1 голос|Набрано $1 голоса|Набрано $1 голосов}}',
+    'wikipoll-email-html'               =>
+'<body>
+<p>$1 к опросу "$2" на странице <a href="$4">$3</a>, что больше или равно заданному лимиту для оповещения ($5).</p>
+<p>Результаты:</p>
+$6
+<p><i>Вы получили это сообщение, потому что следите за страницей <a href="$4">$3</a>.</i></p>
+</body>',
+    'wikipoll-email-text'               => '$1 к опросу "$2" на странице "$3", что больше или равно заданному лимиту для оповещения ($5).
+Результаты можно просмотреть по ссылке: $4
+Вы получили это сообщение, потому что следите за вышеуказанной страницей.',
 );
