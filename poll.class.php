@@ -454,6 +454,8 @@ class WikiPoll
         foreach ($res as $row)
         {
             $a = $row->poll_answer ? $row->poll_answer-1 : 'NONE';
+            if (!isset($this->result[$a]))
+                $this->result[$a] = 0;
             $this->result[$a] += $row->votes;
             $this->total += $row->votes;
             $this->voters[$a][$row->poll_user] = $row->votes;
@@ -485,11 +487,11 @@ class WikiPoll
             $tr .= '<td style="padding-right: 1em"><table style="height: 100%"><tr>' .
                 '<td style="width: '.$width.'px; border: 1px outset #ffea95; background: #ffcb00">' .
                 '</td><td>'.$perc.'%</td></tr></table></td>';
-            if ($this->open && ($voters = $this->voters[$i]))
+            if ($this->open && !empty($this->voters[$i]))
             {
-                foreach ($voters as $v => &$n)
+                foreach ($this->voters[$i] as $v => &$n)
                     $n = htmlspecialchars($v) . ($n > 1 ? ' ('.$n.')' : '');
-                $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', ', $voters).'</td>';
+                $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', ', $this->voters[$i]).'</td>';
             }
             $s .= '<tr>'.$tr.'</tr>';
         }
