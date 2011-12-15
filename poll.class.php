@@ -321,14 +321,17 @@ class WikiPoll
             else
             {
                 // "You must login to vote" for unathorized users
-                $html .= $this->html_options();
+                if ($this->open_results)
+                    $html .= $this->html_results(false);
+                else
+                    $html .= $this->html_options();
                 $html .= wfMsg('wikipoll-must-login-to-vote');
             }
             return $html;
         }
         elseif (($this->end && date('Y-m-d') >= $this->end) || $this->open_results)
         {
-            $html .= $this->html_results();
+            $html .= $this->html_results(true);
         }
         elseif ($this->is_checks && !$uv || count($uv) < $this->points)
         {
@@ -336,7 +339,7 @@ class WikiPoll
         }
         elseif (!$this->hide_results)
         {
-            $html .= $this->html_results();
+            $html .= $this->html_results(false);
         }
         else
         {
@@ -426,7 +429,7 @@ class WikiPoll
             $title->getPrefixedText(),
             $title->getFullUrl(),
             $this->emailvotes,
-            $this->html_results()
+            $this->html_results(false)
         );
         $dbr = wfGetDB(DB_SLAVE);
         $res = $dbr->select(array('watchlist', 'user'), 'user.*', array(
@@ -474,12 +477,15 @@ class WikiPoll
     }
 
     // Show results, optionally with vote buttons/checkboxes if we are OPEN_RESULTS
-    function html_results()
+    function html_results($vote_form)
     {
+        global $wgUser;
         if (!$this->result)
             $this->get_results();
         $uv = $this->get_user_votes();
-        $vote_form = (!$this->end || date('Y-m-d') < $this->end) &&
+        $vote_form = $vote_form &&
+            (!$this->end || date('Y-m-d') < $this->end) &&
+            ($this->authorized == self::POLL_UNAUTH || $wgUser->getID()) &&
             count($uv) < $this->points &&
             $this->open_results;
         $s = '';
@@ -630,7 +636,7 @@ class WikiPoll
         $html .= $this->html_question();
         $open = $this->open_voters;
         $this->open_voters = true;
-        $html .= $this->html_results();
+        $html .= $this->html_results(false);
         $this->open_voters = $open;
         $html .= $this->html_votes_table();
         return $html;
