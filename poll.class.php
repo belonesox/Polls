@@ -90,7 +90,7 @@ class WikiPoll
     const POLL_AUTH_VOTE = 1;
     const POLL_AUTH_DISPLAY = 2;
 
-    var $revote = false, $open = false;
+    var $revote = false, $open_results = false, $open_voters = false;
     var $ID = NULL, $uniqueID = false, $unsafe = false;
     var $is_checks = true, $points = 0, $end = NULL;
     var $authorized = 0, $hide_results = false, $restrict_ip = false;
@@ -259,10 +259,15 @@ class WikiPoll
                 /* Allow to recall answers */
                 $self->revote = true;
             }
-            elseif ($line == 'OPEN')
+            elseif ($line == 'OPEN_RESULTS')
+            {
+                /* Display results even if the user didn't vote */
+                $self->open_results = true;
+            }
+            elseif ($line == 'OPEN' || $line == 'OPEN_VOTERS')
             {
                 /* Display all voters */
-                $self->open = true;
+                $self->open_voters = true;
             }
             elseif ($line != "")
                 break;
@@ -321,17 +326,13 @@ class WikiPoll
             }
             return $html;
         }
-        elseif ($this->end && date('Y-m-d') >= $this->end)
+        elseif (($this->end && date('Y-m-d') >= $this->end) || $this->open_results)
         {
             $html .= $this->html_results();
         }
         elseif ($this->is_checks && !$uv || count($uv) < $this->points)
         {
-            if ($this->is_checks)
-                $html .= $this->html_form_checks();
-            else
-                $html .= $this->html_form_points();
-            return $html;
+            return $this->html_form_vote();
         }
         elseif (!$this->hide_results)
         {
@@ -358,7 +359,8 @@ class WikiPoll
     // Handle POST data, for poll from page $title
     function handle_postdata($title)
     {
-        if (empty($_REQUEST['poll-ID']) || $_REQUEST['poll-ID'] != $this->ID)
+        if (empty($_REQUEST['poll-ID']) || $_REQUEST['poll-ID'] != $this->ID ||
+            $this->end && date('Y-m-d') >= $this->end)
             return;
         $dbw = wfGetDB(DB_MASTER);
         if ($_REQUEST['recall'])
@@ -471,32 +473,56 @@ class WikiPoll
         }
     }
 
-    // Show results
+    // Show results, optionally with vote buttons/checkboxes if we are OPEN_RESULTS
     function html_results()
     {
         if (!$this->result)
             $this->get_results();
+        $uv = $this->get_user_votes();
+        $vote_form = (!$this->end || date('Y-m-d') < $this->end) &&
+            count($uv) < $this->points &&
+            $this->open_results;
         $s = '';
         $max = max($this->result);
+        if (!$this->total)
+            $this->total = $max = 1;
+        $i_voted = $this->user_voted_for();
         foreach ($this->answers as $i => $a)
         {
             $perc = round($this->result[$i]*100/$this->total);
             $width = round($this->result[$i]*100/$max);
-            $tr = '<td style="background-color: #fffacd; border: 1px outset #ffea95; padding: 0 2px">'.$a.'</td>';
+            $tr = '';
+            if ($vote_form)
+            {
+                if ($this->is_checks)
+                    $c = Xml::check('answers[]', false, array('value' => $i+1, 'id' => "c$this->ID-$i"));
+                else
+                    $c = $this->item_points($i+1);
+                $tr .= "<td>$c</td>";
+            }
+            $tr .= '<td style="background-color: #fffacd; border: 1px outset #ffea95; padding: 0 2px">'.$a.'</td>';
             $tr .= '<td style="background-color: #fff8dc; border: 1px outset #ffea95; padding: 0 2px">'.$this->result[$i].'</td>';
             $tr .= '<td style="padding-right: 1em"><table style="height: 100%"><tr>' .
                 '<td style="width: '.$width.'px; border: 1px outset #ffea95; background: #ffcb00">' .
                 '</td><td>'.$perc.'%</td></tr></table></td>';
-            if ($this->open && !empty($this->voters[$i]))
+            if ($this->open_voters && !empty($this->voters[$i]))
             {
                 foreach ($this->voters[$i] as $v => &$n)
                     $n = htmlspecialchars($v) . ($n > 1 ? ' ('.$n.')' : '');
                 $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', ', $this->voters[$i]).'</td>';
             }
+            elseif (!empty($i_voted[$i+1]))
+                $tr .= '<td style="padding-right: 0.3em">'.$this->parse(wfMsgNoTrans('wikipoll-points', $i_voted[$i+1])).'</td>';
             $s .= '<tr>'.$tr.'</tr>';
         }
         $s = '<table style="background-color: white; border: 1px solid #a0c0ff" cellspacing="2" cellpadding="0">'.$s.'</table>';
         $s = '<table style="background-color: #c0f0ff; border: 1px solid #0000ff"><tr><td style="padding: 15px">'.$s.'</td></tr></table>'; // was 7fffd4
+        if ($vote_form)
+        {
+            if ($this->is_checks)
+                $s = $this->form_checks($s);
+            $s = $this->remaining_points() . $s;
+        }
         return $s;
     }
 
@@ -520,56 +546,78 @@ class WikiPoll
         return $this->parse(wfMsgNoTrans('wikipoll-voted-count', $n, $this->end));
     }
 
-    // Poll form (POINTS mode)
-    function html_form_points()
+    // One poll form item for POINTS mode
+    function item_points($num, $label = '')
     {
-        global $wgTitle;
-        $action = $wgTitle->escapeLocalUrl("action=purge");
+        $form = Xml::hidden('poll-ID', $this->ID);
+        $form .= Xml::hidden('answers', $num);
+        $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: #e0e0e0; border: 1px outset gray'));
+        if ($label)
+            $form .= '&nbsp;';
+        $form .= $label;
+        return self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
+    }
+
+    // Wrap $html content into a CHECKS mode form with submit button
+    function form_checks($html)
+    {
+        $form = Xml::hidden('poll-ID', $this->ID) . $html;
+        $form .= Xml::submitButton(wfMsg('wikipoll-submit'), array('name' => 'vote'));
+        return self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
+    }
+
+    // Return poll messages such as remaining votes and open voters warning
+    function remaining_points()
+    {
         $uv = $this->get_user_votes();
         $str = '';
-        if ($this->points > 1)
+        if ($this->open_voters)
+            $str .= wfMsgNoTrans('wikipoll-warning-open').' ';
+        if (!$this->is_checks && $this->points > 1)
         {
             $votes_rest = $this->points-count($uv);
-            if ($this->open)
-                $str .= wfMsgNoTrans('wikipoll-warning-open').' ';
             $str .= $this->parse(wfMsgNoTrans('wikipoll-remaining', $votes_rest));
         }
-        $i_voted = array();
-        foreach ($uv as $n)
-            $i_voted[$n]++;
-        $block = '';
-        foreach ($this->answers as $i => $label)
-        {
-            $form = Xml::hidden('poll-ID', $this->ID);
-            $form .= Xml::hidden('answers', $i+1);
-            $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: #e0e0e0; border: 1px outset gray'));
-            $form .= '&nbsp;';
-            $form .= $label;
-            if (!empty($i_voted[$i+1]))
-                $form .= $this->parse(wfMsgNoTrans('wikipoll-points', $i_voted[$i+1]));
-            $form = self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
-            $block .= self::xelement('li', NULL, $form);
-        }
-        $str .= self::xelement('ul', array('class' => 'wikipoll-alt'), $block);
         return $str;
     }
 
-    // Poll form (CHECKS mode)
-    function html_form_checks()
+    // Return the array of current user's vote counts, indexed by choice number
+    function user_voted_for()
+    {
+        $uv = $this->get_user_votes();
+        $i_voted = array();
+        foreach ($uv as $n)
+        {
+            if (!isset($i_voted[$n]))
+                $i_voted[$n] = 0;
+            $i_voted[$n]++;
+        }
+        return $i_voted;
+    }
+
+    // Poll form
+    function html_form_vote()
     {
         global $wgTitle;
-        $action = $wgTitle->escapeLocalUrl("action=purge");
         $form = '';
+        $i_voted = $this->user_voted_for();
         foreach ($this->answers as $i => $label)
         {
-            $item = Xml::check('answers[]', false, array('value' => $i+1, 'id' => "c$this->ID-$i"));
-            $item .= '&nbsp;' . self::xelement('label', array('for' => "c$this->ID-$i"), $label);
+            if (!empty($i_voted[$i+1]))
+                $label .= $this->parse(wfMsgNoTrans('wikipoll-points', $i_voted[$i+1]));
+            if ($this->is_checks)
+            {
+                $item = Xml::check('answers[]', false, array('value' => $i+1, 'id' => "c$this->ID-$i"));
+                $item .= '&nbsp;' . self::xelement('label', array('for' => "c$this->ID-$i"), $label);
+            }
+            else
+                $item = self::item_points($i+1, $label);
             $form .= self::xelement('li', NULL, $item);
         }
         $form = self::xelement('ul', array('class' => 'wikipoll-alt'), $form);
-        $form = Xml::hidden('poll-ID', $this->ID) . $form;
-        $form .= Xml::submitButton(wfMsg('wikipoll-submit'), array('name' => 'vote'));
-        $form = self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
+        if ($this->is_checks)
+            $form = self::form_checks($form);
+        $form = $this->remaining_points() . $form;
         return $form;
     }
 
@@ -580,10 +628,10 @@ class WikiPoll
         $html = '';
         $html .= $this->html_flags();
         $html .= $this->html_question();
-        $open = $this->open;
-        $this->open = true;
+        $open = $this->open_voters;
+        $this->open_voters = true;
         $html .= $this->html_results();
-        $this->open = $open;
+        $this->open_voters = $open;
         $html .= $this->html_votes_table();
         return $html;
     }
@@ -601,7 +649,8 @@ class WikiPoll
         $flags[] = $this->is_checks ? 'checks' : ($this->points == 1 ? 'alternative' : array('points', $this->points));
         $flags[] = !$this->authorized ? 'unauth' : ($this->authorized == 1 ? 'auth-vote' : 'auth-display');
         $flags[] = $this->restrict_ip ? 'ip-enabled' : 'ip-disabled';
-        $flags[] = $this->open ? 'open' : 'closed';
+        $flags[] = $this->open_voters ? 'voters-open' : 'voters-closed';
+        $flags[] = $this->open_results ? 'results-open' : 'results-closed';
         $flags[] = $this->revote ? 'revote' : 'no-revote';
         if ($this->end)
             $flags[] = array($this->hide_results ? 'end-hidden' : 'end-shown', $this->end);
@@ -609,7 +658,7 @@ class WikiPoll
         foreach ($flags as $f)
         {
             if (!is_array($f))
-                $f = array($f);
+                $f = array($f, '');
             $html .= '<li>'.wfMsgNoTrans('wikipoll-flags-'.$f[0], $f[1]).'</li>';
         }
         $html = '<ul>'.$html.'</ul>';
@@ -632,8 +681,8 @@ class WikiPoll
         $anon = wfMsg('wikipoll-anonymous');
         foreach ($res as $row)
         {
-            if ($row->ip == $row->user)
-                $row->user = $anon;
+            if ($row->poll_ip == $row->poll_user)
+                $row->poll_user = $anon;
             $tr = '';
             foreach ($cols as $col)
             {
