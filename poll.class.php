@@ -517,7 +517,7 @@ class WikiPoll
         // "Total users voted" for authorized users
         $dbr = wfGetDB(DB_SLAVE);
         $n = $dbr->selectField('poll_vote', 'COUNT(DISTINCT poll_user)', array('poll_id' => $this->ID), __METHOD__);
-        return $this->parse(wfMsg('wikipoll-voted-count', $n, $this->end));
+        return $this->parse(wfMsgNoTrans('wikipoll-voted-count', $n, $this->end));
     }
 
     // Poll form (POINTS mode)
@@ -532,7 +532,7 @@ class WikiPoll
             $votes_rest = $this->points-count($uv);
             if ($this->open)
                 $str .= wfMsgNoTrans('wikipoll-warning-open').' ';
-            $str .= $this->parse(wfMsg('wikipoll-remaining', $votes_rest));
+            $str .= $this->parse(wfMsgNoTrans('wikipoll-remaining', $votes_rest));
         }
         $i_voted = array();
         foreach ($uv as $n)

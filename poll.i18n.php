@@ -93,7 +93,7 @@ $messages['ru'] = array(
     'wikipoll-empty'                     => '<b><font color="red">Ошибка: пустой опрос.</font></b>',
     'wikipoll-submit'                    => 'Проголосовать',
     'wikipoll-results-hidden-but-no-end' => '<b><font color="red">Ошибка: результаты будут скрыты навеки, ибо указано HIDE_RESULTS без маркера конца голосования END_POLL YYYY-MM-DD.</font></b>',
-    'wikipoll-remaining'                 => 'Вы можете использовать $1 голос{{PLURAL:$1||ов|а}}.',
+    'wikipoll-remaining'                 => 'Вы можете использовать $1 голос{{PLURAL:$1||а|ов}}.',
     'wikipoll-too-many-votes'            => '<b>Выбрано слишком много голосов.</b> ',
     'wikipoll-none-of-above'             => 'Ничего из перечисленного',
     'wikipoll-recall'                    => 'Отозвать свой голос',
