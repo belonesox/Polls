@@ -335,7 +335,8 @@ class WikiPoll
         }
         elseif ($this->is_checks && !$uv || count($uv) < $this->points)
         {
-            return $this->html_form_vote();
+            $html .= $this->html_form_vote();
+            return $html;
         }
         elseif (!$this->hide_results)
         {
