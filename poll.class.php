@@ -556,8 +556,8 @@ class WikiPoll
     // One poll form item for POINTS mode
     function item_points($num, $label = '')
     {
-        $form = Xml::hidden('poll-ID', $this->ID);
-        $form .= Xml::hidden('answers', $num);
+        $form = Html::hidden('poll-ID', $this->ID);
+        $form .= Html::hidden('answers', $num);
         $form .= Xml::submitButton('+', array('name' => 'vote', 'style' => 'color: blue; background-color: #e0e0e0; border: 1px outset gray'));
         if ($label)
             $form .= '&nbsp;';
@@ -568,7 +568,7 @@ class WikiPoll
     // Wrap $html content into a CHECKS mode form with submit button
     function form_checks($html)
     {
-        $form = Xml::hidden('poll-ID', $this->ID) . $html;
+        $form = Html::hidden('poll-ID', $this->ID) . $html;
         $form .= Xml::submitButton(wfMsg('wikipoll-submit'), array('name' => 'vote'));
         return self::xelement('form', array('action' => '#poll-'.$this->ID, 'method' => 'POST'), $form);
     }
