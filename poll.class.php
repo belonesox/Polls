@@ -316,7 +316,7 @@ class WikiPoll
         $results = false;
         if ($this->authorized != self::POLL_UNAUTH && !$wgUser->getID())
         {
-            if ($self->authorized == self::POLL_AUTH_DISPLAY)
+            if ($this->authorized == self::POLL_AUTH_DISPLAY)
                 return wfMsg('wikipoll-must-login');
             else
             {
