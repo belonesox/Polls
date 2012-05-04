@@ -24,7 +24,7 @@ $dir = dirname(__FILE__) . '/';
 $wgExtensionMessagesFiles['WikiPoll'] = $dir . 'poll.i18n.php';
 $wgAutoloadClasses['WikiPoll'] = $dir . 'poll.class.php';
 $wgAutoloadClasses['SpecialPolls'] = $dir . 'poll.class.php';
-$wgExtensionFunctions[] = 'wfPoll';
+$wgHooks['ParserFirstCallInit'][] = 'wfRegisterPoll';
 $wgHooks['LoadExtensionSchemaUpdates'][] = 'WikiPoll::LoadExtensionSchemaUpdates';
 $wgSpecialPages['Polls'] = 'SpecialPolls';
 $wgSpecialPageGroups['Polls'] = 'other';
@@ -32,8 +32,8 @@ $wgGroupPermissions['sysop']['viewpolls'] = true;
 $wgGroupPermissions['bureaucrat']['viewpolls'] = true;
 
 /* Hook is here, class is autoloaded lazily */
-function wfPoll()
+function wfRegisterPoll($parser)
 {
-    global $wgParser;
-    $wgParser->setHook('poll', 'WikiPoll::renderPoll');
+    $parser->setHook('poll', 'WikiPoll::renderPoll');
+    return true;
 }
