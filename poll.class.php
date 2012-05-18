@@ -56,9 +56,8 @@ class SpecialPolls extends SpecialPage
         wfLoadExtensionMessages('WikiPoll');
         $page = new Article($page);
         self::$curId = $id;
-        $wgParser->disableCache();
-        $wgParser->setHook('poll', 'SpecialPolls::adminPoll');
         $options = ParserOptions::newFromUser($wgUser);
+        $wgParser->extAdminPoll = true;
         $wgParser->parse($page->getContent(), $page->getTitle(), $options);
         if (!self::$curPoll)
         {
@@ -77,6 +76,7 @@ class SpecialPolls extends SpecialPage
     }
     static function adminPoll($input, $attr, $parser)
     {
+        $parser->disableCache();
         $poll = WikiPoll::newFromText($parser, $input);
         if (is_object($poll) && (!self::$curPoll || $poll->ID == self::$curId))
             self::$curPoll = $poll;

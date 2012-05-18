@@ -34,6 +34,9 @@ $wgGroupPermissions['bureaucrat']['viewpolls'] = true;
 /* Hook is here, class is autoloaded lazily */
 function wfRegisterPoll($parser)
 {
-    $parser->setHook('poll', 'WikiPoll::renderPoll');
+    if (!isset($parser->extAdminPoll))
+        $parser->setHook('poll', 'WikiPoll::renderPoll');
+    else
+        $parser->setHook('poll', 'SpecialPolls::adminPoll');
     return true;
 }
