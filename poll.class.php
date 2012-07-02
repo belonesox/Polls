@@ -367,7 +367,7 @@ class WikiPoll
             $this->end && date('Y-m-d') >= $this->end)
             return;
         $dbw = wfGetDB(DB_MASTER);
-        if ($_REQUEST['recall'])
+        if ($_REQUEST['recall'] && $this->revote)
         {
             // Delete old votes
             $dbw->delete('poll_vote', array(
@@ -398,6 +398,11 @@ class WikiPoll
             // Register user votes
             $rows = array();
             foreach ($votes as $vote)
+            {
+                $vote = intval($vote);
+                // Select "none of the above" for invalid votes
+                if ($vote > count($this->answers) || $vote <= 0)
+                    $vote = NULL;
                 $rows[] = array(
                     'poll_id'     => $this->ID,
                     'poll_user'   => $this->username,
@@ -405,6 +410,7 @@ class WikiPoll
                     'poll_answer' => $vote,
                     'poll_date'   => $timestamp,
                 );
+            }
             $dbw->insert('poll_vote', $rows, __METHOD__);
             $dbw->commit();
             // If there is more than VOTES_TO_EMAIL, notify watchers
@@ -457,23 +463,31 @@ class WikiPoll
         $this->result = array_pad(array(), count($this->answers), 0);
         $this->voters = array();
         $this->total = 0;
+        $none_result = 0;
+        $none_voters = array();
         foreach ($res as $row)
         {
-            $a = $row->poll_answer ? $row->poll_answer-1 : 'NONE';
-            if (!isset($this->result[$a]))
-                $this->result[$a] = 0;
-            $this->result[$a] += $row->votes;
             $this->total += $row->votes;
-            $this->voters[$a][$row->poll_user] = $row->votes;
+            if ($row->poll_answer)
+            {
+                $a = $row->poll_answer-1;
+                if (!isset($this->result[$a]))
+                    $this->result[$a] = 0;
+                $this->result[$a] += $row->votes;
+                $this->voters[$a][$row->poll_user] = $row->votes;
+            }
+            else
+            {
+                $none_result += $row->votes;
+                $none_voters[$row->poll_user] = $row->votes;
+            }
         }
         $dbr->freeResult($res);
-        if (!empty($this->result['NONE']))
+        if (!empty($none_result))
         {
-            $this->voters[count($this->result)] = $this->voters['NONE'];
-            $this->result[] = $this->result['NONE'];
+            $this->voters[count($this->result)] = $none_voters;
+            $this->result[] = $none_result;
             $this->answers[] = wfMsg('wikipoll-none-of-above');
-            unset($this->result['NONE']);
-            unset($this->voters['NONE']);
         }
     }
 
