@@ -153,6 +153,8 @@ class WikiPoll
             // only when isSectionPreview == false
             // This generates error messages if <ref> was used even outside
             // the poll itself.
+            // FIXME: This can be removed, because mediawiki4intranet
+            // Cite version has a fix for this problem.
             $this->parserOptions->setIsSectionPreview(true);
         }
         $old = $this->parser->mOptions;
