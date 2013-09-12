@@ -53,7 +53,6 @@ class SpecialPolls extends SpecialPage
             $wgOut->redirect(Title::newFromText($wgTitle->getPrefixedText().'/'.$page.'/'.$id)->getFullUrl());
             return;
         }
-        wfLoadExtensionMessages('WikiPoll');
         $page = new Article($page);
         self::$curId = $id;
         $options = ParserOptions::newFromUser($wgUser);
@@ -126,7 +125,6 @@ class WikiPoll
     static function renderPoll($input, $attr, $parser)
     {
         $parser->disableCache();
-        wfLoadExtensionMessages('WikiPoll');
         $poll = WikiPoll::newFromText($parser, $input);
         if (!is_object($poll))
             return $poll;
