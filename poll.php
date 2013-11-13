@@ -30,6 +30,18 @@ $wgSpecialPages['Polls'] = 'SpecialPolls';
 $wgSpecialPageGroups['Polls'] = 'other';
 $wgGroupPermissions['sysop']['viewpolls'] = true;
 $wgGroupPermissions['bureaucrat']['viewpolls'] = true;
+$wgResourceModules['WikiPoll'] = array(
+    'scripts'       => array('poll.js'),
+    'styles'        => array(),
+    'dependencies'  => array('jquery'),
+    'localBasePath' => __DIR__,
+    'remoteExtPath' => 'Polls',
+    'position'      => 'top',
+    'messages'      => array('loading', 'wikipoll-emails-copy', 'wikipoll-emails-error'),
+);
+$wgAjaxExportList[] = 'WikiPoll::AjaxExportList';
+
+$wgWikiPollShowUserEmails = true;
 
 /* Hook is here, class is autoloaded lazily */
 function wfRegisterPoll($parser)

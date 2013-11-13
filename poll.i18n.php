@@ -86,6 +86,10 @@ $6
     'wikipoll-email-text'               => '$1 to poll "$2" on the page "$3", which exceeds or is equal to email notification limit ($5).
 Check poll results on the page: $4
 You receive this message because you\'re watching the page.',
+
+    'wikipoll-emails-copy'              => 'Emails of voted userss (enter Ctrl+C to copy to clipboard)',
+    'wikipoll-emails-error'             => 'Error while getting e-mails',
+    'wikipoll-emails-get'               => 'Get e-mails of voted users',
 );
 
 $messages['ru'] = array(
@@ -170,4 +174,8 @@ $6
     'wikipoll-email-text'               => '$1 к опросу "$2" на странице "$3", что больше или равно заданному лимиту для оповещения ($5).
 Результаты можно просмотреть по ссылке: $4
 Вы получили это сообщение, потому что следите за вышеуказанной страницей.',
+
+    'wikipoll-emails-copy'              => "E-mail'ы проголосовавших пользователей\n(нажмите Ctrl+C, чтобы скопировать их в буфер обмена)",
+    'wikipoll-emails-error'             => 'Произошла ошибка сервера',
+    'wikipoll-emails-get'               => 'Получить e-mail\'ы пользователей',
 );

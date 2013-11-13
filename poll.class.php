@@ -21,7 +21,7 @@ class SpecialPolls extends SpecialPage
     }
     function execute($par)
     {
-        global $wgRequest, $wgOut, $wgUser, $wgParser, $wgTitle;
+        global $wgRequest, $wgOut, $wgUser, $wgParser, $wgTitle, $wgWikiPollShowUserEmails;
         if (!$this->userCanExecute($wgUser))
         {
             $this->displayRestrictionError();
@@ -70,6 +70,10 @@ class SpecialPolls extends SpecialPage
             return;
         }
         $id = self::$curPoll->ID;
+        if ($wgWikiPollShowUserEmails)
+        {
+            $wgOut->addModules('WikiPoll');
+        }
         $wgOut->setPageTitle(wfMsg('wikipoll-admin-title', $page->getTitle()->getPrefixedText(), $id));
         $wgOut->addHTML(self::$curPoll->html_admin());
     }
@@ -124,12 +128,45 @@ class WikiPoll
     // A parser hook for <poll> tag
     static function renderPoll($input, $attr, $parser)
     {
+        global $wgOut, $wgWikiPollShowUserEmails;
+        if ($wgWikiPollShowUserEmails)
+        {
+            $wgOut->addModules('WikiPoll');
+        }
         $parser->disableCache();
         $poll = WikiPoll::newFromText($parser, $input);
         if (!is_object($poll))
             return $poll;
         $poll->handle_postdata($parser->getTitle());
         return $poll->render();
+    }
+
+    static function AjaxExportList($id)
+    {
+        global $wgWikiPollShowUserEmails;
+        if (!$wgWikiPollShowUserEmails)
+        {
+            wfHttpError(404, 'Not Found', 'Not Found');
+            die();
+        }
+
+        $id = htmlentities($id);
+        $id = strtoupper($id);
+
+        $dbr = wfGetDB(DB_SLAVE);
+        $where = array('poll_id' => $id);
+        $res = $dbr->select('poll_vote INNER JOIN user ON user.user_name = poll_user', 'user.*', $where, __METHOD__);
+
+        $mails = array();
+        while ($row = $res->fetchObject())
+        {
+            $user = User::newFromRow($row);
+            if ($user)
+            {
+                $mails[] = $user->getEmail();
+            }
+        }
+        return implode('; ', $mails);
     }
 
     // Local parsing and HTML rendering for individual lines of wiki markup
@@ -486,7 +523,7 @@ class WikiPoll
     // Show results, optionally with vote buttons/checkboxes if we are OPEN_RESULTS
     function html_results($vote_form)
     {
-        global $wgUser;
+        global $wgUser, $wgWikiPollShowUserEmails;
         if (!$this->result)
             $this->get_results();
         $uv = $this->get_user_votes();
@@ -530,6 +567,10 @@ class WikiPoll
         }
         $s = '<table style="background-color: white; border: 1px solid #a0c0ff" cellspacing="2" cellpadding="0">'.$s.'</table>';
         $s = '<table style="background-color: #c0f0ff; border: 1px solid #0000ff"><tr><td style="padding: 15px">'.$s.'</td></tr></table>'; // was 7fffd4
+        if ($wgWikiPollShowUserEmails && !empty($this->voters))
+        {
+            $s .= "\n" . '<a href="#" class="getMails">' . wfMsg('wikipoll-emails-get') . '</a>' . "\n";
+        }
         if ($vote_form)
         {
             if ($this->is_checks)
