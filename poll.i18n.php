@@ -3,6 +3,8 @@
 $messages = array();
 
 $messages['en'] = array(
+    'action-viewpolls'                  => 'View poll results',
+
     'wikipoll-desc'                     => 'A simple extension for inserting polls into articles.',
     'wikipoll-must-login'               => '<b><font color="red">Sorry, you must be logged in to view this poll.</font></b>',
     'wikipoll-must-login-to-vote'       => '<p><b><font color="red">You must be logged in to vote.</font></b></p>',
@@ -89,6 +91,7 @@ You receive this message because you\'re watching the page.',
 );
 
 $messages['ru'] = array(
+    'action-viewpolls'                   => 'Просмотр результатов опросов',
     'wikipoll-desc'                      => 'Простое расширение для организации опросов/голосований на основе MediaWiki.',
     'wikipoll-must-login'                => '<b><font color="red">Извините, вы должны войти в систему, чтобы участвовать в этом голосовании или видеть его результаты.</font></b>',
     'wikipoll-must-login-to-vote'        => '<p><b><font color="red">Вы должны войти в систему, чтобы участвовать в этом голосовании.</font></b></p>',

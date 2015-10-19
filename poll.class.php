@@ -15,10 +15,12 @@ class SpecialPolls extends SpecialPage
 {
     static $curId;
     static $curPoll;
+
     function __construct()
     {
-        SpecialPage::SpecialPage('Polls', 'viewpolls');
+        parent::__construct('Polls', 'viewpolls');
     }
+
     function execute($par)
     {
         global $wgRequest, $wgOut, $wgUser, $wgParser, $wgTitle;
