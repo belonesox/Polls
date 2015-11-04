@@ -118,8 +118,8 @@ class WikiPoll
     // DB schema updates
     static function LoadExtensionSchemaUpdates()
     {
-        global $wgExtNewTables;
-        $wgExtNewTables[] = array("poll_votes", dirname(__FILE__) . "/poll-tables.sql");
+        global $wgExtNewTables, $wgDBtype;
+        $wgExtNewTables[] = array("poll_votes", dirname(__FILE__) . "/poll-tables-$wgDBtype.sql");
         return true;
     }
 
@@ -394,7 +394,7 @@ class WikiPoll
         $uv = $this->get_user_votes();
         if ($votes && ($this->is_checks || count($votes)+count($uv) <= $this->points))
         {
-            $timestamp = wfTimestamp(TS_DB);
+            $timestamp = $dbw->timestamp();
             if ($this->is_checks)
             {
                 // Delete old votes for CHECKS mode
