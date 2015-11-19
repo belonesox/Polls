@@ -119,7 +119,7 @@ class WikiPoll
     static function LoadExtensionSchemaUpdates()
     {
         global $wgExtNewTables, $wgDBtype;
-        $wgExtNewTables[] = array("poll_votes", dirname(__FILE__) . "/poll-tables-$wgDBtype.sql");
+        $wgExtNewTables[] = array("poll_vote", dirname(__FILE__) . "/poll-tables-$wgDBtype.sql");
         return true;
     }
 
