@@ -9,7 +9,7 @@
 --
 -- Poll answers
 --
-CREATE TABLE IF NOT EXISTS /*$wgDBPrefix*/poll_vote (
+CREATE TABLE IF NOT EXISTS /*$wgDBprefix*/poll_vote (
   poll_id VARCHAR(32) NOT NULL,
   poll_user VARCHAR(255) NOT NULL,
   poll_ip VARCHAR(255),
@@ -17,5 +17,5 @@ CREATE TABLE IF NOT EXISTS /*$wgDBPrefix*/poll_vote (
   poll_date TIMESTAMP WITH TIME ZONE NOT NULL
 ) /*$wgDBTableOptions*/;
 
-CREATE INDEX /*$wgDBPrefix*/poll_vote_poll_id ON /*$wgDBPrefix*/poll_vote (poll_id);
-CREATE INDEX /*$wgDBPrefix*/poll_vote_poll_user ON /*$wgDBPrefix*/poll_vote (poll_user);
+CREATE INDEX /*$wgDBprefix*/poll_vote_poll_id ON /*$wgDBprefix*/poll_vote (poll_id);
+CREATE INDEX /*$wgDBprefix*/poll_vote_poll_user ON /*$wgDBprefix*/poll_vote (poll_user);

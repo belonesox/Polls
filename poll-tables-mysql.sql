@@ -9,7 +9,7 @@
 --
 -- Poll answers
 --
-CREATE TABLE IF NOT EXISTS /*$wgDBPrefix*/poll_vote (
+CREATE TABLE IF NOT EXISTS /*$wgDBprefix*/poll_vote (
   poll_id VARCHAR(32) NOT NULL,
   poll_user VARCHAR(255) NOT NULL,
   poll_ip VARCHAR(255),
