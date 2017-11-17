@@ -196,9 +196,12 @@ class WikiPoll
 
         //ARTICLE_MAGIC_WORD
         
-        $text2hash = str_replace(ARTICLE_MAGIC_WORD, strval($wgTitle->mArticleID), $text);
-        $text = str_replace(ARTICLE_MAGIC_WORD, $wgTitle->getPrefixedText(), $text);
-        
+        $text2hash = $text;
+        if ($wgTitle) {
+            $text2hash = str_replace(ARTICLE_MAGIC_WORD, strval($wgTitle->mArticleID), $text);
+            $text = str_replace(ARTICLE_MAGIC_WORD, $wgTitle->getPrefixedText(), $text);
+        }    
+
         $self->ID = strtoupper(md5($text2hash)); // MD5-hash or poll text
         
         $lines = explode("\n", trim($text));
