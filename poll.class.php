@@ -11,7 +11,7 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU General Public License 2.0 or later
  */
 
-define('ARTICLE_MAGIC_WORD', '{{Article}}');  
+define('ARTICLE_MAGIC_WORD', 'ARTICLE4POLL');  
   
 class SpecialPolls extends SpecialPage
 {
