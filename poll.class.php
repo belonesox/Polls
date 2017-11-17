@@ -11,6 +11,8 @@
  * @license http://www.gnu.org/copyleft/gpl.html GNU General Public License 2.0 or later
  */
 
+define('ARTICLE_MAGIC_WORD', '{{Article}}');  
+  
 class SpecialPolls extends SpecialPage
 {
     static $curId;
@@ -75,6 +77,7 @@ class SpecialPolls extends SpecialPage
         $wgOut->setPageTitle(wfMsg('wikipoll-admin-title', $page->getTitle()->getPrefixedText(), $id));
         $wgOut->addHTML(self::$curPoll->html_admin());
     }
+
     static function adminPoll($input, $attr, $parser)
     {
         $parser->disableCache();
@@ -184,14 +187,20 @@ class WikiPoll
     // returns string => error
     static function newFromText($parser, $text)
     {
-        global $wgUser;
+        global $wgUser, $wgTitle;
 
         $self = new WikiPoll;
         $self->parser = $parser;
         $self->userip = wfGetIP();
         $self->username = $wgUser->getName();
 
-        $self->ID = strtoupper(md5($text)); // MD5-hash or poll text
+        //ARTICLE_MAGIC_WORD
+        
+        $text2hash = str_replace(ARTICLE_MAGIC_WORD, strval($wgTitle->mArticleID), $text);
+        $text = str_replace(ARTICLE_MAGIC_WORD, $wgTitle->getPrefixedText(), $text);
+        
+        $self->ID = strtoupper(md5($text2hash)); // MD5-hash or poll text
+        
         $lines = explode("\n", trim($text));
         while ($lines)
         {
@@ -275,10 +284,13 @@ class WikiPoll
                 break;
             array_shift($lines);
         }
+
         if ($self->uniqueID)
             $self->ID = 'Y'.substr(md5($self->ID . '-' . $parser->mTitle->getPrefixedText()), 1);
+
         if ($self->points < 1)
             $self->points = 1;
+
         $self->question = $self->parse(trim(array_shift($lines)));
         $self->answers = array();
         foreach ($lines as $line)
@@ -287,15 +299,19 @@ class WikiPoll
             if ($line)
                 $self->answers[] = $self->parse($line);
         }
+
         if ($self->question == "" || count($self->answers) < 2)
             return wfMsg('wikipoll-empty');
+
         if ($self->hide_results && !$self->end)
         {
             /* HIDE_RESULTS requires END_POLL */
             return wfMsg('wikipoll-results-hidden-but-no-end');
         }
+
         if ($self->emailvotes < 0 || $self->hide_results && date('Y-m-d') < $self->end)
             $self->emailvotes = false;
+
         return $self;
     }
 
@@ -386,11 +402,13 @@ class WikiPoll
         {
             return;
         }
+
         $votes = $_REQUEST['answers'];
         if (!is_array($votes))
         {
             $votes = array($votes); // Just one answer
         }
+
         $uv = $this->get_user_votes();
         if ($votes && ($this->is_checks || count($votes)+count($uv) <= $this->points))
         {
