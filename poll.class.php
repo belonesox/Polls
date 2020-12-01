@@ -543,9 +543,12 @@ class WikiPoll
                 '</td><td>'.$perc.'%</td></tr></table></td>';
             if ($this->open_voters && !empty($this->voters[$i]))
             {
-                foreach ($this->voters[$i] as $v => &$n)
+                $voters_links = array();
+                foreach ($this->voters[$i] as $v => &$n){
                     $n = htmlspecialchars($v) . ($n > 1 ? ' ('.$n.')' : '');
-                $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', ', $this->voters[$i]).'</td>';
+                    $voters_links[$v] = $this->parse('[[' . $n . ']]');
+                }    
+                $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', *', $voters_links) .'</td>';
             }
             elseif (!empty($i_voted[$i+1]))
                 $tr .= '<td style="padding-right: 0.3em">'.$this->parse(wfMsgNoTrans('wikipoll-points', $i_voted[$i+1])).'</td>';
