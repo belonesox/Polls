@@ -546,9 +546,9 @@ class WikiPoll
                 $voters_links = array();
                 foreach ($this->voters[$i] as $v => &$n){
                     $n = htmlspecialchars($v) . ($n > 1 ? ' ('.$n.')' : '');
-                    $voters_links[$v] = $this->parse('[[' . $n . ']]');
+                    $voters_links[$v] = $this->parse('[[User:' . $n . '|' . $n . ']]');
                 }    
-                $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', *', $voters_links) .'</td>';
+                $tr .= '<td style="color: #666; padding-right: 0.3em">'.implode(', ', $voters_links) .'</td>';
             }
             elseif (!empty($i_voted[$i+1]))
                 $tr .= '<td style="padding-right: 0.3em">'.$this->parse(wfMsgNoTrans('wikipoll-points', $i_voted[$i+1])).'</td>';
